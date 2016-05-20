@@ -28,6 +28,19 @@ public class Skynet implements Brain {
 
     public Skynet(int difficulty) {
         behavior = new Behavior(new SurvivalInstinct());
+
+        if (difficulty > 1) {
+            behavior.addInstinct(new ShootEnemyInstinct());
+        }
+        if (difficulty > 2) {
+            behavior.addInstinct(new ShootEnemyBaseInstinct());
+        }
+        if (difficulty > 3) {
+            behavior.addInstinct(new DefendBaseInstinct());
+        }
+        if (difficulty > 4) {
+            behavior.addInstinct(new DefendFriendlyInstinct());
+        }
     }
 
     @Override
@@ -82,23 +95,23 @@ final class Behavior {
     public Behavior(Instinct... influences) {
         instincts = new ArrayList<>();
         for (Instinct i : influences) {
-            addInfluence(i);
+            addInstinct(i);
         }
     }
 
     /**
-     * Adds another instinct decision to be considered. No duplicate influences
-     * will be added.
+     * Adds another instinct decision to be considered. No duplicate instincts
+     * can be added.
      *
      * @param instinct the instinct to add
      * @return returns the instinct added. If the instinct exists, that one is
      * returned.
      */
-    public Instinct addInfluence(Instinct instinct) {
+    public Instinct addInstinct(Instinct instinct) {
         assert instinct != null : "Can't add null Influence";
-        for (Instinct inf : instincts) {
-            if (inf.getClass().equals(instinct.getClass())) {
-                return inf;
+        for (Instinct inst : instincts) {
+            if (inst.getClass().equals(instinct.getClass())) {
+                return inst;
             }
         }
         this.instincts.add(instinct);
@@ -106,7 +119,7 @@ final class Behavior {
     }
 
     /**
-     * Returns the optimal move that satisfies the most number of influences.
+     * Returns the optimal move that satisfies the most number of instincts.
      *
      * @param state the state of the board
      * @return The best move to execute.
@@ -216,12 +229,10 @@ class SurvivalInstinct extends Instinct {
                     } else {
                         score += move.getDirection() == Direction.SOUTHWEST ? 2 : 0;
                     }
+                } else if (dst.getRow() > GameState.NUMROWS / 2) {
+                    score += move.getDirection() == Direction.NORTHEAST ? 2 : 0;
                 } else {
-                    if (dst.getRow() > GameState.NUMROWS / 2) {
-                        score += move.getDirection() == Direction.NORTHEAST ? 2: 0;
-                    } else {
-                        score += move.getDirection() == Direction.SOUTHEAST ? 2 : 0;
-                    }
+                    score += move.getDirection() == Direction.SOUTHEAST ? 2 : 0;
                 }
             }
             if (move.getMoveType() == Move.MoveType.MOVE) {
@@ -247,7 +258,7 @@ class SurvivalInstinct extends Instinct {
                     score += location.distanceTo(l) - 50;
                 } else if (state.isPlayer(location, 3 - state.getTeam())) {
                     score += Math.min(0, location.distanceTo(l) - 6);
-                    if (((GameState._Player)state.getOccupant(location)).facingLocation(state.getLocation())) {
+                    if (((GameState._Player) state.getOccupant(location)).facingLocation(state.getLocation())) {
                         score -= 10;
                     }
                 } else if (state.isPlayer(location, state.getTeam())) {
@@ -257,6 +268,50 @@ class SurvivalInstinct extends Instinct {
         }
 
         return score;
+    }
+
+}
+
+class ShootEnemyInstinct extends Instinct {
+
+    @Override
+    public double[] rateMoves(List<Move> m, GameState s) {
+        double[] scores = new double[m.size()];
+        
+        return scores;
+    }
+
+}
+
+class ShootEnemyBaseInstinct extends Instinct {
+
+    @Override
+    public double[] rateMoves(List<Move> m, GameState s) {
+        double[] scores = new double[m.size()];
+        
+        return scores;
+    }
+
+}
+
+class DefendBaseInstinct extends Instinct {
+
+    @Override
+    public double[] rateMoves(List<Move> m, GameState s) {
+        double[] scores = new double[m.size()];
+        
+        return scores;
+    }
+
+}
+
+class DefendFriendlyInstinct extends Instinct {
+
+    @Override
+    public double[] rateMoves(List<Move> m, GameState s) {
+        double[] scores = new double[m.size()];
+        
+        return scores;
     }
 
 }
@@ -435,20 +490,16 @@ enum Direction {
 
         if (Math.abs(dX) != Math.abs(dY)) {
             return false;
-        } else {
-            if (dX < 0) {
-                if (dY < 0) {
-                    return this == Direction.NORTHWEST;
-                } else {
-                    return this == Direction.SOUTHWEST;
-                }
+        } else if (dX < 0) {
+            if (dY < 0) {
+                return this == Direction.NORTHWEST;
             } else {
-                if (dY < 0) {
-                    return this == Direction.NORTHEAST;
-                } else {
-                    return this == Direction.SOUTHEAST;
-                }
+                return this == Direction.SOUTHWEST;
             }
+        } else if (dY < 0) {
+            return this == Direction.NORTHEAST;
+        } else {
+            return this == Direction.SOUTHEAST;
         }
     }
 }
@@ -661,7 +712,7 @@ class GameState {
     }
 
     /**
-     * Returns a list of locations of occupants facing the location
+     * Returns a list of locations of occupants facing the location l
      *
      * @param l location to check from
      * @return A list of locations that indicate where the occupants are
@@ -759,6 +810,7 @@ class GameState {
         return locations;
     }
 
+    //TODO: implement
     public _Occupant getOccupantInLOS() {
         return null;
     }
@@ -772,7 +824,7 @@ class GameState {
                 && col >= 0 && col < NUMCOLS;
     }
 
-    // private classes
+    // 'private' classes
     abstract class _Occupant {
 
         Location location;
@@ -814,20 +866,16 @@ class GameState {
 
             if (Math.abs(dX) != Math.abs(dY)) {
                 return false;
-            } else {
-                if (dX < 0) {
-                    if (dY < 0) {
-                        return direction == Direction.NORTHWEST;
-                    } else {
-                        return direction == Direction.SOUTHWEST;
-                    }
+            } else if (dX < 0) {
+                if (dY < 0) {
+                    return direction == Direction.NORTHWEST;
                 } else {
-                    if (dY < 0) {
-                        return direction == Direction.NORTHEAST;
-                    } else {
-                        return direction == Direction.SOUTHEAST;
-                    }
+                    return direction == Direction.SOUTHWEST;
                 }
+            } else if (dY < 0) {
+                return direction == Direction.NORTHEAST;
+            } else {
+                return direction == Direction.SOUTHEAST;
             }
         }
     }
