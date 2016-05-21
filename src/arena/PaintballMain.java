@@ -7,12 +7,8 @@
 package arena;
 
 import brains.*;
-import java.awt.Graphics2D;
-import java.awt.List;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.geom.Line2D;
-import java.awt.geom.Rectangle2D;
 import java.util.ArrayList;
 import java.util.Random;
 import javax.swing.Timer;
@@ -48,18 +44,18 @@ public class PaintballMain extends javax.swing.JFrame {
         //fill team rosters
         team = new Player[3][];
         team[1] = new Player[1];
-        team[2] = new Player[50];
+        team[2] = new Player[1];
         for (int i = 1; i <= 2; i++)
             for (int j = 0; j < team[i].length; j++) {
                 int x = randGen.nextInt(4);
                 if (x == 0)
-                    team[i][j] = new Player(i, new Sprinkler());
+                    team[i][j] = new Player(i, new Shooter());
                 else if (x == 1)
-                    team[i][j] = new Player(i, new DumbBaseCharger());
+                    team[i][j] = new Player(i, new Shooter());
                 else if (x == 2)
                     team[i][j] = new Player(i, new Shooter());
                 else
-                    team[i][j] = new Player(i, new RandoBot());
+                    team[i][j] = new Player(i, new Shooter());
             }
         
         team[1][0] = new Player(1, new Skynet());
