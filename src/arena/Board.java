@@ -6,6 +6,9 @@
 
 package arena;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  *
  * @author tweis0306
@@ -87,5 +90,61 @@ public class Board {
     int getScore(int team) {
         return score[team];
     }
-           
+    
+    public List<Player> getAllPlayers() {
+        List<Player> result = new ArrayList<Player>(40);
+        for (int r = 0; r < grid.length; r++) {
+            for (int c = 0; c < grid[r].length; c++) {
+                if (grid[r][c] instanceof Player)
+                    result.add((Player) grid[r][c]);
+            }
+        }
+        return result;
+    }
+    
+    public List<Player> getAllPlayers(int team) {
+        List<Player> result = new ArrayList<Player>(20);
+        for (int r = 0; r < grid.length; r++) {
+            for (int c = 0; c < grid[r].length; c++) {
+                if (grid[r][c] instanceof Player &&
+                        grid[r][c].getTeam() == team)
+                    result.add((Player) grid[r][c]);
+            }
+        }
+        return result;
+    }
+    
+    public List<Shot> getAllShots() {
+        List<Shot> result = new ArrayList<Shot>(40);
+        for (int r = 0; r < grid.length; r++) {
+            for (int c = 0; c < grid[r].length; c++) {
+                if (grid[r][c] instanceof Shot)
+                    result.add((Shot) grid[r][c]);
+            }
+        }
+        return result;
+    }
+    
+    public List<Shot> getAllShots(int team) {
+        List<Shot> result = new ArrayList<Shot>(20);
+        for (int r = 0; r < grid.length; r++) {
+            for (int c = 0; c < grid[r].length; c++) {
+                if (grid[r][c] instanceof Shot &&
+                        grid[r][c].getTeam() == team)
+                    result.add((Shot) grid[r][c]);
+            }
+        }
+        return result;
+    }
+
+    public Base getBase(int team) {
+        for (int r = 0; r < grid.length; r++) {
+            for (int c = 0; c < grid[r].length; c++) {
+                if (grid[r][c] instanceof Base &&
+                        grid[r][c].getTeam() == team)
+                    return (Base) grid[r][c];
+            }
+        }
+        return null;
+    }
 }

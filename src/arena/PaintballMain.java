@@ -43,23 +43,36 @@ public class PaintballMain extends javax.swing.JFrame {
     private void reset() {
         //fill team rosters
         team = new Player[3][];
-        team[1] = new Player[1];
-        team[2] = new Player[1];
-        for (int i = 1; i <= 2; i++)
-            for (int j = 0; j < team[i].length; j++) {
-                int x = randGen.nextInt(4);
-                if (x == 0)
-                    team[i][j] = new Player(i, new Shooter());
-                else if (x == 1)
-                    team[i][j] = new Player(i, new Shooter());
-                else if (x == 2)
-                    team[i][j] = new Player(i, new Shooter());
-                else
-                    team[i][j] = new Player(i, new Shooter());
-            }
-        
-        team[1][0] = new Player(1, new Skynet());
-        
+        team[1] = new Player[11];
+        team[2] = new Player[11];
+        for (int i = 0; i < team[1].length; i++) {
+            team[1][i] = new Player(1, new RandoBot());
+        }
+        for (int i = 0; i < team[2].length; i++) {
+            team[2][i] = new Player(2, new Skynet());
+        }
+//        team[1][0] = new Player(1, new BangBang300());
+//        team[2][0] = new Player(2, new BillyTester());
+//        team[1][1] = new Player(1, new BrainyMcBrainface());
+//        team[2][1] = new Player(2, new ChaosBot());
+//        team[1][2] = new Player(1, new Charge());
+//        team[2][2] = new Player(2, new DumbBaseDefender());
+//        team[1][3] = new Player(1, new Guardian());
+//        team[2][3] = new Player(2, new Joshua());
+//        team[1][4] = new Player(1, new MainBot());
+//        team[2][4] = new Player(2, new MyBrain());
+//        team[1][5] = new Player(1, new OnionSpeaks());
+//        team[2][5] = new Player(2, new Radar());
+//        team[1][6] = new Player(1, new RandomMove());
+//        team[2][6] = new Player(2, new Skynet());
+//        team[1][7] = new Player(1, new SlowAdvance());
+//        team[2][7] = new Player(2, new SmartBrain());
+//        team[1][8] = new Player(1, new StrafeBot());
+//        team[2][8] = new Player(2, new TestDefender());
+//        team[1][9] = new Player(1, new WalkBack());
+//        team[2][9] = new Player(2, new WentaoLi_RightWingPoliticans());
+//        team[1][10] = new Player(1, new sharpshooter());
+//        team[2][10] = new Player(2, new updownshooter()); 
         //create game board
         board = new Board(33, 50);
         fieldPanel.setMyBoard(board);
@@ -85,11 +98,12 @@ public class PaintballMain extends javax.swing.JFrame {
         new Blocker().addSelfToBoard(board, 16, 45);
         new Blocker().addSelfToBoard(board, 12, 45);
         new Blocker().addSelfToBoard(board, 20, 45);
-        final int NUM_BLOCKS_PER_SIDE = 0;
+        final int NUM_BLOCKS_PER_SIDE = 50;
         for (int i = 0; i < NUM_BLOCKS_PER_SIDE; ) {
             int row = randGen.nextInt(33);
             int col = randGen.nextInt(25);
-            if (board.isEmpty(row, col)) {
+            if (board.isEmpty(row, col) &&
+                    (col > 4 || row < 12 || row > 20)) {
                 new Blocker().addSelfToBoard(board, row, col);
                 new Blocker().addSelfToBoard(board, 32-row, 49-col);
                 i++;
@@ -160,6 +174,7 @@ public class PaintballMain extends javax.swing.JFrame {
         stepButton = new javax.swing.JButton();
         runButton = new javax.swing.JButton();
         speedSlider = new javax.swing.JSlider();
+        statsButton = new javax.swing.JButton();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -212,6 +227,13 @@ public class PaintballMain extends javax.swing.JFrame {
             }
         });
 
+        statsButton.setText("Stats");
+        statsButton.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                statsButtonActionPerformed(evt);
+            }
+        });
+
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
@@ -230,6 +252,8 @@ public class PaintballMain extends javax.swing.JFrame {
                         .addComponent(runButton)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(speedSlider, javax.swing.GroupLayout.PREFERRED_SIZE, 118, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                        .addComponent(statsButton)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                         .addComponent(team2Label, javax.swing.GroupLayout.PREFERRED_SIZE, 279, javax.swing.GroupLayout.PREFERRED_SIZE)))
                 .addContainerGap())
@@ -244,7 +268,8 @@ public class PaintballMain extends javax.swing.JFrame {
                         .addComponent(team1Label, javax.swing.GroupLayout.PREFERRED_SIZE, 23, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addComponent(resetButton)
                         .addComponent(stepButton)
-                        .addComponent(runButton))
+                        .addComponent(runButton)
+                        .addComponent(statsButton))
                     .addComponent(speedSlider, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(fieldPanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
@@ -281,6 +306,36 @@ public class PaintballMain extends javax.swing.JFrame {
         if (timer != null)
             timer.setDelay(1001 - speedSlider.getValue());
     }//GEN-LAST:event_speedSliderStateChanged
+
+    private void statsButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_statsButtonActionPerformed
+        int nameFieldWidth = 0, coderFieldWidth = 0;
+        for (int t = 1; t <= 2; t++) {
+            for (int i = 0; i < team[t].length; i++) {
+                if (team[t][i].getController().getName().length() > nameFieldWidth)
+                    nameFieldWidth = team[t][i].getController().getName().length();
+                if (team[t][i].getController().getCoder().length() > coderFieldWidth)
+                    coderFieldWidth = team[t][i].getController().getCoder().length();
+            }   
+        }
+        for (int t = 1; t <= 2; t++) {
+            System.out.println("\nTeam " + t + ":");
+            String formatStr = "%" + nameFieldWidth +
+                    "s %" + coderFieldWidth +
+                    "s %5s %5s %6s %6s %4s %5s\n";
+            System.out.printf(formatStr, "Name", "Coder",
+                    "kills", "frags", "deaths", "enemyB", "ownB",
+                    "score");
+            for (int i = 0; i < team[t].length; i++) {
+                Player p = team[t][i];
+                System.out.printf(formatStr, 
+                        p.getController().getName(),
+                        p.getController().getCoder(),
+                        p.getKills(), p.getFrags(),
+                        p.getDeaths(), p.getEnemyBaseHits(),
+                        p.getSelfBaseHits(), p.getScore());
+            }
+        }
+    }//GEN-LAST:event_statsButtonActionPerformed
     
     /**
      * @param args the command line arguments
@@ -322,6 +377,7 @@ public class PaintballMain extends javax.swing.JFrame {
     private javax.swing.JButton resetButton;
     private javax.swing.JButton runButton;
     private javax.swing.JSlider speedSlider;
+    private javax.swing.JButton statsButton;
     private javax.swing.JButton stepButton;
     private javax.swing.JLabel team1Label;
     private javax.swing.JLabel team2Label;

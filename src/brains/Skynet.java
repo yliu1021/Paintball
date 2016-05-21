@@ -10,8 +10,8 @@ import arena.Player;
 import arena.Shot;
 import java.awt.Color;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  *
@@ -90,7 +90,7 @@ final class Behavior {
 
     private final List<Instinct> instincts;
 
-    public Behavior(Instinct... influences) {
+    Behavior(Instinct... influences) {
         instincts = new ArrayList<>();
         for (Instinct i : influences) {
             addInstinct(i);
@@ -105,7 +105,7 @@ final class Behavior {
      * @return returns the instinct added. If the instinct exists, that one is
      * returned.
      */
-    public Instinct addInstinct(Instinct instinct) {
+    Instinct addInstinct(Instinct instinct) {
         assert instinct != null : "Can't add null Influence";
         for (Instinct inst : instincts) {
             if (inst.getClass().equals(instinct.getClass())) {
@@ -122,7 +122,7 @@ final class Behavior {
      * @param state the state of the board
      * @return The best move to execute.
      */
-    public Move getMove(GameState state) {
+    Move getMove(GameState state) {
         List<Move> moves = Move.validMoves(state);
 
         double[] moveScores = new double[moves.size()];
@@ -153,20 +153,20 @@ class SurvivalInstinct extends Instinct {
 
     private int weight;
 
-    public SurvivalInstinct() {
+    SurvivalInstinct() {
         this(1);
     }
 
-    public SurvivalInstinct(int weight) {
+    SurvivalInstinct(int weight) {
         this.weight = weight;
     }
 
-    public void setWeight(int weight) {
+    void setWeight(int weight) {
         this.weight = weight;
     }
 
     @Override
-    public double getWeight() {
+    double getWeight() {
         return weight;
     }
 
@@ -179,7 +179,7 @@ class SurvivalInstinct extends Instinct {
      * @return [-150, 0]
      */
     @Override
-    public double[] rateMoves(List<Move> moves, GameState state) {
+    double[] rateMoves(List<Move> moves, GameState state) {
         double[] scores = new double[moves.size()];
 
         for (int i = 0; i < moves.size(); i++) {
@@ -253,7 +253,7 @@ class SurvivalInstinct extends Instinct {
 class ShootEnemyInstinct extends Instinct {
 
     @Override
-    public double[] rateMoves(List<Move> m, GameState s) {
+    double[] rateMoves(List<Move> m, GameState s) {
         double[] scores = new double[m.size()];
 
         return scores;
@@ -264,7 +264,7 @@ class ShootEnemyInstinct extends Instinct {
 class ShootEnemyBaseInstinct extends Instinct {
 
     @Override
-    public double[] rateMoves(List<Move> m, GameState s) {
+    double[] rateMoves(List<Move> m, GameState s) {
         double[] scores = new double[m.size()];
 
         return scores;
@@ -275,7 +275,7 @@ class ShootEnemyBaseInstinct extends Instinct {
 class DefendBaseInstinct extends Instinct {
 
     @Override
-    public double[] rateMoves(List<Move> m, GameState s) {
+    double[] rateMoves(List<Move> m, GameState s) {
         double[] scores = new double[m.size()];
 
         return scores;
@@ -286,7 +286,7 @@ class DefendBaseInstinct extends Instinct {
 class DefendFriendlyInstinct extends Instinct {
 
     @Override
-    public double[] rateMoves(List<Move> m, GameState s) {
+    double[] rateMoves(List<Move> m, GameState s) {
         double[] scores = new double[m.size()];
 
         return scores;
@@ -296,8 +296,8 @@ class DefendFriendlyInstinct extends Instinct {
 
 class GameState {
 
-    public static int NUMCOLS;
-    public static int NUMROWS;
+    static int NUMCOLS;
+    static int NUMROWS;
 
     private _Occupant[][] occupants;
 
@@ -306,7 +306,7 @@ class GameState {
     
     private _Player player;
     
-    public GameState(Player p, Board b) {
+    GameState(Player p, Board b) {
         NUMCOLS = b.numCols();
         NUMROWS = b.numRows();
         
@@ -339,19 +339,19 @@ class GameState {
 
     // Methods for accessing information about the
     // current player
-    public Location location() {
+    Location location() {
         return player.location;
     }
 
-    public int team() {
+    int team() {
         return player.team;
     }
 
-    public Direction direction() {
+    Direction direction() {
         return player.direction;
     }
     
-    public boolean canMove(Move move) {
+    boolean canMove(Move move) {
         if (move.getMoveType() != Move.MoveType.MOVE) {
             return true;
         }
@@ -362,39 +362,39 @@ class GameState {
                 && (!isBase(r, c, 0) && !isBlocker(r, c) && !isPlayer(r, c, 0));
     }
 
-    public boolean canShoot() {
+    boolean canShoot() {
         return turnsUntilShoot() == 0;
     }
 
-    public int turnsUntilShoot() {
+    int turnsUntilShoot() {
         return player.turnsUntilShoot;
     }
 
     // Methods for accessing occupants on the board
-    public _Base getFriendlyBase() {
+    _Base getFriendlyBase() {
         return friendlyBase;
     }
 
-    public _Base getEnemyBase() {
+    _Base getEnemyBase() {
         return enemyBase;
     }
     
-    public _Occupant getOccupant(Location l) {
+    _Occupant getOccupant(Location l) {
         return getOccupant(l.getRow(), l.getCol());
     }
 
-    public _Occupant getOccupant(int row, int col) {
+    _Occupant getOccupant(int row, int col) {
         if (isValid(row, col)) {
             return occupants[row][col];
         }
         return null;
     }
     
-    public _Shot getShot(Location l) {
+    _Shot getShot(Location l) {
         return getShot(l.getRow(), l.getCol());
     }
     
-    public _Shot getShot(int row, int col) {
+    _Shot getShot(int row, int col) {
         _Occupant o = getOccupant(row, col);
         if (o instanceof _Shot) {
             return (_Shot)o;
@@ -403,11 +403,11 @@ class GameState {
         }
     }
     
-    public _Blocker getBlocker(Location l) {
+    _Blocker getBlocker(Location l) {
         return getBlocker(l.getRow(), l.getCol());
     }
     
-    public _Blocker getBlocker(int row, int col) {
+    _Blocker getBlocker(int row, int col) {
         _Occupant o = getOccupant(row, col);
         if (o instanceof _Blocker) {
             return (_Blocker)o;
@@ -416,11 +416,11 @@ class GameState {
         }
     }
     
-    public _Player getPlayer(Location l) {
+    _Player getPlayer(Location l) {
         return getPlayer(l.getRow(), l.getCol());
     }
     
-    public _Player getPlayer(int row, int col) {
+    _Player getPlayer(int row, int col) {
         _Occupant o = getOccupant(row, col);
         if (o instanceof _Player) {
             return (_Player)o;
@@ -429,56 +429,56 @@ class GameState {
         }
     }
     
-    public boolean isShot(Location l) {
+    boolean isShot(Location l) {
         return isShot(l, 0);
     }
     
-    public boolean isShot(Location l, int team) {
+    boolean isShot(Location l, int team) {
         return isShot(l.getRow(), l.getCol(), team);
     }
     
-    public boolean isShot(int row, int col) {
+    boolean isShot(int row, int col) {
         return isShot(row, col, 0);
     }
     
-    public boolean isShot(int row, int col, int team) {
+    boolean isShot(int row, int col, int team) {
         _Occupant o = occupants[row][col];
         return (o instanceof _Shot) &&
                (team != 0 ? ((_Shot)o).team == team : true);
     }
     
-    public boolean isBlocker(Location l) {
+    boolean isBlocker(Location l) {
         return isBlocker(l.getRow(), l.getCol());
     }
     
-    public boolean isBlocker(int row, int col) {
+    boolean isBlocker(int row, int col) {
         _Occupant o = occupants[row][col];
         return (o instanceof _Blocker);
     }
 
-    public boolean isPlayer(Location l) {
+    boolean isPlayer(Location l) {
         return isPlayer(l, 0);
     }
     
-    public boolean isPlayer(Location l, int team) {
+    boolean isPlayer(Location l, int team) {
         return isPlayer(l.getRow(), l.getCol(), team);
     }
 
-    public boolean isPlayer(int row, int col) {
+    boolean isPlayer(int row, int col) {
         return isPlayer(row, col, 0);
     }
     
-    public boolean isPlayer(int row, int col, int team) {
+    boolean isPlayer(int row, int col, int team) {
         _Occupant o = occupants[row][col];
         return (o instanceof _Player) &&
                (team != 0 ? ((_Player)o).team == team : true);
     }
     
-    public boolean isBase(Location l, int team) {
+    boolean isBase(Location l, int team) {
         return isBase(l.getRow(), l.getCol(), team);
     }
 
-    public boolean isBase(int row, int col, int team) {
+    boolean isBase(int row, int col, int team) {
         _Occupant o = occupants[row][col];
         return (o instanceof _Base) &&
                (team != 0 ? ((_Base)o).team == team : true);
@@ -490,7 +490,7 @@ class GameState {
      * @param l location to check from
      * @return A list of locations that indicate where the occupants are
      */
-    public List<Location> getDirectionalsFacing(Location l) {
+    List<Location> getDirectionalsFacing(Location l) {
         List<Location> locations = new ArrayList<>();
         if (!isValid(l)) {
             return locations;
@@ -516,7 +516,7 @@ class GameState {
      * @return 
      * Returns a list of occupants if there is one, else returns an empty list
      */
-    public List<_Occupant> getOccupantsInLOS() {
+    List<_Occupant> getOccupantsInLOS() {
         return getOccupantsInDirection(direction());
     }
 
@@ -526,7 +526,7 @@ class GameState {
      * @return 
      * Returns a list of occupants that is in a certain direction
      */
-    public List<_Occupant> getOccupantsInDirection(Direction direction) {
+    List<_Occupant> getOccupantsInDirection(Direction direction) {
         return getOccupantsInDirectionFrom(location(), direction);
     }
     
@@ -537,7 +537,7 @@ class GameState {
      * @return 
      * Returns a list of occupants
      */
-    public List<_Occupant> getOccupantsInDirectionFrom(Location location, Direction direction) {        
+    List<_Occupant> getOccupantsInDirectionFrom(Location location, Direction direction) {        
         Location offset = direction.directionOffset();
         
         List<_Occupant> results = new ArrayList<>();
@@ -555,11 +555,11 @@ class GameState {
         return results;
     }
     
-    public boolean isValid(Location l) {
+    boolean isValid(Location l) {
         return isValid(l.getRow(), l.getCol());
     }
 
-    public boolean isValid(int row, int col) {
+    boolean isValid(int row, int col) {
         return (row >= 0 && row < NUMROWS) &&
                (col >= 0 && col < NUMCOLS);
     }
@@ -693,6 +693,168 @@ class GameState {
 
 }
 
+/**
+ * A singleton class used to predict states based on
+ * previous states
+ */
+final class MarkovChain {
+
+    private static MarkovChain chain;
+
+    static MarkovChain getChain() {
+        if (chain == null) {
+            chain = new MarkovChain();
+        }
+        return chain;
+    }
+
+    private final Queue<GameState> states;
+    private final StateProcessor processor;
+
+    private MarkovChain() {
+        states = new ConcurrentLinkedQueue<>();
+        processor = new StateProcessor(this, states);
+        start();
+    }
+    
+    void start() {
+        processor.start();
+    }
+
+    /**
+     * Stops the StateProcessor from processing more states
+     */
+    void stopProcessing() {
+        processor.stopRunning();
+    }
+
+    /**
+     * Updates the state of the game.
+     * New state will be added to preexisting states
+     * for analysis.
+     * Restarts the StateProcessor if it's been stopped
+     * @param newState
+     */
+    void addState(GameState newState) {
+        states.add(newState);
+        processor.refresh();
+    }
+
+    private Prediction[] playerPredictions;
+
+    void setNumPlayers(int numPlayers) {
+        playerPredictions = new Prediction[numPlayers];
+    }
+
+    /**
+     * Predicts the next state based on past states
+     * @return
+     * returns the predicted state
+     */
+    synchronized GameState predictNextState() {
+        return null;
+    }
+
+}
+
+/**
+ * Created by Yuhan on 5/15/16.
+ */
+class StateProcessor extends Thread {
+
+    static final boolean OPT_TEAMMATES = false;
+    static final boolean OPT_ENEMIES   = false;
+    static final boolean OPT_SHOTS     = false;
+    static final boolean OPT_BARRIERS  = false;
+    static final boolean OPT_POINTS    = false;
+
+    static final int MAX_STATES = 100;
+
+    private final MarkovChain predChain;
+    private final Queue<GameState> states;
+    private Thread thread;
+
+    private boolean processing = true;
+
+    StateProcessor(MarkovChain predChain, Queue<GameState> states) {
+        this.predChain = predChain;
+        this.states = states;
+    }
+
+    @Override
+    public void run() {
+        GameState previousState = null;
+        while (processing) {
+            System.out.println("size" + states.size());
+            while (states.isEmpty()) {
+                synchronized (this) {
+                    try {
+                        wait();
+                    } catch (InterruptedException e) {
+                    }
+                }
+            }
+
+            // remove excess states
+            int size = states.size();
+            if (size > MAX_STATES) {
+                int diff = size - MAX_STATES - 1;
+                while (diff-- > 0)
+                    states.remove();
+                previousState = states.poll();
+            }
+
+            try {
+                GameState newState;
+                synchronized (states) {
+                    newState = states.poll();
+                }
+                if (previousState != null) {
+                    processState(previousState, newState);
+                }
+                previousState = newState;
+            } catch (NoSuchElementException e) {
+                System.out.println("Tried to remove element from empty queue\nError in concurrency code");
+            }
+        }
+    }
+
+    @Override
+    public void start() {
+        if (this.thread == null) {
+            this.thread = new Thread(this, "StateProcessorThread");
+        }
+        this.thread.start();
+    }
+
+    /**
+     * Terminates thread
+     */
+    synchronized void stopRunning() {
+        processing = false;
+    }
+
+    /**
+     * Restarts/refreshes the processing queue
+     */
+    synchronized void refresh() {
+        processing = true;
+        notify();
+    }
+
+    private void processState(GameState oldState, GameState newState) {
+        // TODO: implement
+    }
+}
+
+class Prediction {
+    
+}
+
+class Condition {
+    
+}
+
 class Move {
 
     /**
@@ -701,7 +863,7 @@ class Move {
      * @param s state of the board
      * @return An array of valid moves
      */
-    public static List<Move> validMoves(GameState s) {
+    static List<Move> validMoves(GameState s) {
         List<Move> moves = new ArrayList<>(18);
 
         // add pass move
@@ -728,7 +890,7 @@ class Move {
         return moves;
     }
 
-    public enum MoveType {
+    enum MoveType {
 
         TURN,
         MOVE,
@@ -759,20 +921,20 @@ class Move {
     private final MoveType moveType;
     private final Direction direction;
 
-    public Move(MoveType moveType, Direction direction) {
+    Move(MoveType moveType, Direction direction) {
         this.moveType = moveType;
         this.direction = direction;
     }
 
-    public MoveType getMoveType() {
+    MoveType getMoveType() {
         return moveType;
     }
 
-    public Direction getDirection() {
+    Direction getDirection() {
         return direction;
     }
 
-    public Location locationAfterMove(Location location, GameState state) {
+    Location locationAfterMove(Location location, GameState state) {
         assert location != null : "Location is null";
         if (state.canMove(this) && moveType == MoveType.MOVE) {
             Location dst = location.adjLocationInDir(direction);
@@ -782,7 +944,7 @@ class Move {
     }
 
     // interfacing with Direction and Action.
-    public Action getAction() {
+    Action getAction() {
         return new Action(moveType.toString(), direction.toDegrees());
     }
 
@@ -812,31 +974,31 @@ enum Direction {
         return Direction.values()[degrees / 45];
     }
 
-    public int toDegrees() {
+    int toDegrees() {
         return this.ordinal() * 45;
     }
 
-    public boolean isNorth() {
+    boolean isNorth() {
         int deg = toDegrees();
         return deg < 90 || deg > 270;
     }
     
-    public boolean isSouth() {
+    boolean isSouth() {
         int deg = toDegrees();
         return deg > 90 && deg < 270;
     }
     
-    public boolean isEast() {
+    boolean isEast() {
         int deg = toDegrees();
         return deg > 0 && deg < 180;
     }
     
-    public boolean isWest() {
+    boolean isWest() {
         int deg = toDegrees();
         return deg > 180 && deg < 360;
     }
     
-    public Location directionOffset() {
+    Location directionOffset() {
         int r = 0;
         int c = 0;
         
@@ -967,28 +1129,28 @@ class Location {
     private int row;
     private int col;
 
-    public Location(int row, int col) {
+    Location(int row, int col) {
         this.row = row;
         this.col = col;
     }
 
-    public int getRow() {
+    int getRow() {
         return row;
     }
 
-    public void setRow(int row) {
+    void setRow(int row) {
         this.row = row;
     }
 
-    public int getCol() {
+    int getCol() {
         return col;
     }
 
-    public void setCol(int col) {
+    void setCol(int col) {
         this.col = col;
     }
 
-    public Location adjLocationInDir(Direction dir) {
+    Location adjLocationInDir(Direction dir) {
         Location offset = dir.directionOffset();
         
         return this.plus(offset);
@@ -1083,7 +1245,7 @@ abstract class Instinct {
      * @return returns the importance of an influence can be used as a bias
      * factor
      */
-    public double getWeight() {
+    double getWeight() {
         return 1;
     }
 
@@ -1094,6 +1256,6 @@ abstract class Instinct {
      * @param s the state of the board
      * @return an array of scores, each corresponding to the move in m
      */
-    public abstract double[] rateMoves(List<Move> m, GameState s);
+    abstract double[] rateMoves(List<Move> m, GameState s);
 
 }

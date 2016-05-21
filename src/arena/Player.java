@@ -111,11 +111,9 @@ public class Player extends Occupant {
         do {
             row = randGen.nextInt(33);
             if (team == 1)
-//                col = randGen.nextInt(10);
-                col = randGen.nextInt(50);
+                col = randGen.nextInt(10);
             else
-//                col = randGen.nextInt(10) + 40;
-                col = randGen.nextInt(50);
+                col = randGen.nextInt(10) + 40;
         } while (!board.isEmpty(row, col));
         direction = (team == 1 ? 90 : 270);
         addSelfToBoard(board, row, col);
@@ -130,8 +128,6 @@ public class Player extends Occupant {
             action = controller.getMove(this, myBoard);
         } catch (Exception e) {
             action = new Action("P");
-            System.out.println("Exception caught " + e);
-            e.printStackTrace();
         }
         String actionType = action.getType();
         
