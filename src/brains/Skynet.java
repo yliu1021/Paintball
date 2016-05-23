@@ -90,9 +90,9 @@ final class Behavior {
 
     private final List<Instinct> instincts;
 
-    Behavior(Instinct... influences) {
-        instincts = new ArrayList<>();
-        for (Instinct i : influences) {
+    Behavior(Instinct... instincts) {
+        this.instincts = new ArrayList<>();
+        for (Instinct i : instincts) {
             addInstinct(i);
         }
     }
