@@ -110,10 +110,11 @@ public class Player extends Occupant {
         int row, col;
         do {
             row = randGen.nextInt(33);
-            if (team == 1)
-                col = randGen.nextInt(10);
-            else
-                col = randGen.nextInt(10) + 40;
+//            if (team == 1)
+//                col = randGen.nextInt(10);
+//            else
+//                col = randGen.nextInt(10) + 40;
+            col = randGen.nextInt(50);
         } while (!board.isEmpty(row, col));
         direction = (team == 1 ? 90 : 270);
         addSelfToBoard(board, row, col);
