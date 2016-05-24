@@ -59,6 +59,7 @@ public class Skynet implements Brain {
 
     @Override
     public Action getMove(Player p, Board b) {
+        long start = System.nanoTime();
         GameState state = new GameState(p, b);
 
         Move bestMove = behavior.getMove(state);
@@ -151,13 +152,13 @@ final class Behavior {
 
 class SurvivalInstinct extends Instinct {
 
-    private int weight;
+    private double weight;
 
     SurvivalInstinct() {
         this(1);
     }
 
-    SurvivalInstinct(int weight) {
+    SurvivalInstinct(double weight) {
         this.weight = weight;
     }
 
@@ -176,72 +177,107 @@ class SurvivalInstinct extends Instinct {
      *
      * @param m the move to be rated
      * @param s the state of the board
-     * @return [-150, 0]
+     * @return
      */
     @Override
     double[] rateMoves(List<Move> moves, GameState state) {
         double[] scores = new double[moves.size()];
+        Location currLoc = state.location();
+
+        List<_Shot> shotsFacing = state.getFacingDirectionalsOfType(currLoc, _Shot.class);
+        List<_Player> playersFacing = state.getFacingDirectionalsOfType(currLoc, _Player.class);
+
+        _Shot closestShot = null;
+        if (shotsFacing.size() > 0) {
+            closestShot = shotsFacing.get(0);
+            for (_Shot shot : shotsFacing) {
+                if (shot.location.distanceTo(currLoc) < closestShot.location.distanceTo(currLoc)) {
+                    closestShot = shot;
+                }
+            }
+        }
+
+        _Player closestEnemyPlayer = null;
+        _Player closestFriendlyPlayer = null;
+        if (playersFacing.size() > 0) {
+            for (int i = 0; i < playersFacing.size(); i++) {
+                _Player p = playersFacing.get(i);
+                if (p.team != state.team()) {
+                    if (closestEnemyPlayer != null) {
+                        if (p.location.distanceTo(currLoc) < closestEnemyPlayer.location.distanceTo(currLoc)) {
+                            closestEnemyPlayer = p;
+                        }
+                    } else {
+                        closestEnemyPlayer = p;
+                    }
+                } else if (closestFriendlyPlayer != null) {
+                    if (p.location.distanceTo(currLoc) < closestFriendlyPlayer.location.distanceTo(currLoc)) {
+                        closestFriendlyPlayer = p;
+                    }
+                } else {
+                    closestFriendlyPlayer = p;
+                }
+            }
+        }
 
         for (int i = 0; i < moves.size(); i++) {
             Move move = moves.get(i);
-            Location dst = move.locationAfterMove(state.location(), state);
-            GameState endState;
-            double score = rateLocation(dst, state);
-            if (move.getMoveType() == Move.MoveType.SHOOT) {
-                if (((GameState._Directional) state.getOccupant(state.location())).facingLocation(state.getFriendlyBase().location)) {
-                    score -= 1000;
-                } else if (((GameState._Directional) state.getOccupant(state.location())).facingLocation(state.getEnemyBase().location)) {
-                    score += 2;
-                }
-                score += 15;
-            }
-            if (move.getMoveType() == Move.MoveType.TURN) {
-                if (dst.distanceTo(state.getEnemyBase().location) < 3) {
-                    if (move.getDirection().facingLocation(dst, state.getEnemyBase().location)) {
-                        score += 2;
+            Move.MoveType moveType = move.getMoveType();
+
+            switch (moveType) {
+                case MOVE:
+                    Location dst = move.locationAfterMove(currLoc, state);
+
+                    break;
+                case TURN:
+                    if (shotsFacing.size() >= 4) {
+
                     }
-                }
-                if (dst.getCol() > GameState.NUMCOLS / 2) {
-                    if (dst.getRow() > GameState.NUMROWS / 2) {
-                        score += move.getDirection() == Direction.NORTHWEST ? 2 : 0;
-                    } else {
-                        score += move.getDirection() == Direction.SOUTHWEST ? 2 : 0;
+                    break;
+                case SHOOT:
+                    if (shotsFacing.size() == 8) { //surrounded
+                        scores[i] += 100;
                     }
-                } else if (dst.getRow() > GameState.NUMROWS / 2) {
-                    score += move.getDirection() == Direction.NORTHEAST ? 2 : 0;
-                } else {
-                    score += move.getDirection() == Direction.SOUTHEAST ? 2 : 0;
-                }
+                    break;
+                default:
+                    break;
             }
-            if (move.getMoveType() == Move.MoveType.MOVE) {
-                if (dst.distanceTo(state.getEnemyBase().location) < state.location().distanceTo(state.getEnemyBase().location)) {
-                    score += 2;
-                }
-            }
-            scores[i] = score;
         }
 
         return scores;
     }
 
-    private double rateLocation(Location l, GameState state) {
-        double score = 0;
-        List<Location> facingLocations = state.getDirectionalsFacing(l);
+    // For _Shots
+    // >= -200 is certain death
+    // > -100 is danger
+    // Players rated the same way
+    private double rateDirectional(_Directional directional, Location location, GameState state) {
+        double score;
 
-        if (facingLocations.isEmpty()) {
-            return 0;
+        Location directionalLoc = directional.location;
+        int distance = directionalLoc.distanceTo(location);
+        if (distance <= 10) { //at most 4 moves to get away
+            score = 12.5 * distance - 225.0;
         } else {
-            for (Location location : facingLocations) {
-                if (state.isShot(location, 0)) {
-                    score += location.distanceTo(l) - 50;
-                } else if (state.isPlayer(location, 3 - state.team())) {
-                    score += Math.min(0, location.distanceTo(l) - 6);
-                    if (state.getPlayer(location).facingLocation(state.location())) {
-                        score -= 10;
-                    }
-                } else if (state.isPlayer(location, state.team())) {
-                    score += Math.min(0, location.distanceTo(l) - 2);
+            score = 2.5 * distance - 125;
+        }
+
+        Direction facingDir = directionalLoc.directionTo(location);
+
+        List<_Shot> shotsInDirectionalPath = state.getOccupantsInDirection(directionalLoc, facingDir, _Shot.class);
+
+        for (_Shot shot : shotsInDirectionalPath) {
+            int shotDistance = shot.location.distanceTo(directionalLoc);
+            if (shotDistance >= location.distanceTo(directionalLoc)) {
+                break;
+            } else if (shot.facingLocation(directionalLoc)) {
+                double sScore;
+                if (shotDistance <= 10) {
+                    sScore = 225.0 - 12.5 * distance;
+                } else {
+                    sScore = 125.0 - 2.5 * distance ;
                 }
+                score *= Math.min(1.0, sScore / 175.0);
             }
         }
 
@@ -303,13 +339,13 @@ class GameState {
 
     private _Base enemyBase;
     private _Base friendlyBase;
-    
+
     private _Player player;
-    
+
     GameState(Player p, Board b) {
         NUMCOLS = b.numCols();
         NUMROWS = b.numRows();
-        
+
         player = new _Player(p);
 
         occupants = new _Occupant[NUMROWS][NUMCOLS];
@@ -350,7 +386,7 @@ class GameState {
     Direction direction() {
         return player.direction;
     }
-    
+
     boolean canMove(Move move) {
         if (move.getMoveType() != Move.MoveType.MOVE) {
             return true;
@@ -378,7 +414,7 @@ class GameState {
     _Base getEnemyBase() {
         return enemyBase;
     }
-    
+
     _Occupant getOccupant(Location l) {
         return getOccupant(l.getRow(), l.getCol());
     }
@@ -389,68 +425,68 @@ class GameState {
         }
         return null;
     }
-    
+
     _Shot getShot(Location l) {
         return getShot(l.getRow(), l.getCol());
     }
-    
+
     _Shot getShot(int row, int col) {
         _Occupant o = getOccupant(row, col);
         if (o instanceof _Shot) {
-            return (_Shot)o;
+            return (_Shot) o;
         } else {
             return null;
         }
     }
-    
+
     _Blocker getBlocker(Location l) {
         return getBlocker(l.getRow(), l.getCol());
     }
-    
+
     _Blocker getBlocker(int row, int col) {
         _Occupant o = getOccupant(row, col);
         if (o instanceof _Blocker) {
-            return (_Blocker)o;
+            return (_Blocker) o;
         } else {
             return null;
         }
     }
-    
+
     _Player getPlayer(Location l) {
         return getPlayer(l.getRow(), l.getCol());
     }
-    
+
     _Player getPlayer(int row, int col) {
         _Occupant o = getOccupant(row, col);
         if (o instanceof _Player) {
-            return (_Player)o;
+            return (_Player) o;
         } else {
             return null;
         }
     }
-    
+
     boolean isShot(Location l) {
         return isShot(l, 0);
     }
-    
+
     boolean isShot(Location l, int team) {
         return isShot(l.getRow(), l.getCol(), team);
     }
-    
+
     boolean isShot(int row, int col) {
         return isShot(row, col, 0);
     }
-    
+
     boolean isShot(int row, int col, int team) {
         _Occupant o = occupants[row][col];
-        return (o instanceof _Shot) &&
-               (team != 0 ? ((_Shot)o).team == team : true);
+        return (o instanceof _Shot)
+                && (team != 0 ? ((_Shot) o).team == team : true);
     }
-    
+
     boolean isBlocker(Location l) {
         return isBlocker(l.getRow(), l.getCol());
     }
-    
+
     boolean isBlocker(int row, int col) {
         _Occupant o = occupants[row][col];
         return (o instanceof _Blocker);
@@ -459,7 +495,7 @@ class GameState {
     boolean isPlayer(Location l) {
         return isPlayer(l, 0);
     }
-    
+
     boolean isPlayer(Location l, int team) {
         return isPlayer(l.getRow(), l.getCol(), team);
     }
@@ -467,392 +503,345 @@ class GameState {
     boolean isPlayer(int row, int col) {
         return isPlayer(row, col, 0);
     }
-    
+
     boolean isPlayer(int row, int col, int team) {
         _Occupant o = occupants[row][col];
-        return (o instanceof _Player) &&
-               (team != 0 ? ((_Player)o).team == team : true);
+        return (o instanceof _Player)
+                && (team != 0 ? ((_Player) o).team == team : true);
     }
-    
+
     boolean isBase(Location l, int team) {
         return isBase(l.getRow(), l.getCol(), team);
     }
 
     boolean isBase(int row, int col, int team) {
         _Occupant o = occupants[row][col];
-        return (o instanceof _Base) &&
-               (team != 0 ? ((_Base)o).team == team : true);
+        return (o instanceof _Base)
+                && (team != 0 ? ((_Base) o).team == team : true);
     }
 
     /**
-     * Returns a list of locations of occupants facing the location l
+     * Returns a list of locations of occupants facing the current location with
+     * nothing _Immovable in between
      *
      * @param l location to check from
      * @return A list of locations that indicate where the occupants are
      */
-    List<Location> getDirectionalsFacing(Location l) {
-        List<Location> locations = new ArrayList<>();
+    <T extends _Directional> List<T> getFacingDirectionals(Class<T>... types) {
+        return getFacingDirectionalsOfType(location(), types);
+    }
+
+    /**
+     * Returns a list of locations of occupants facing the location l with
+     * nothing _Immovable in between
+     *
+     * @param l location to check from
+     * @return A list of locations that indicate where the occupants are
+     */
+    <T extends _Directional> List<T> getFacingDirectionals(Location l, Class<T>... types) {
+        return getFacingDirectionalsOfType(l, types);
+    }
+
+    <T extends _Directional> List<T> getFacingDirectionalsOfType(final Location l, final Class<T>... types) {
+        final List<T> locations = new ArrayList<>();
         if (!isValid(l)) {
             return locations;
         }
 
-        for (Direction direction : Direction.values()) {
-            List<_Occupant> occupantsInDirection = getOccupantsInDirectionFrom(l, direction);
-            for (_Occupant occupant : occupantsInDirection) {
-                if (occupant instanceof _Directional) {
-                    _Directional directional = (_Directional)occupant;
-                    if (directional.facingLocation(l)) {
-                        locations.add(directional.location);
+        OccupantReceiver receiver = new OccupantReceiver() {
+            @Override
+            public void receiveOccupant(_Occupant o) {
+                if (stop) {
+                    return;
+                }
+                if (o instanceof _Immovable) {
+                    stop = true;
+                    return;
+                }
+                for (Class<T> type : types) {
+                    if (type.isInstance(o)) {
+                        T directional = type.cast(o);
+                        if (directional.facingLocation(l)) {
+                            locations.add(directional);
+                        }
+                        break;
                     }
                 }
             }
+        };
+
+        for (Direction direction : Direction.values()) {
+            forEachOccupantInDirection(l, direction, receiver);
         }
-        
+
         return locations;
-    }
-    
-    /**
-     * Returns a list of occupants in the player's line of sight
-     * @return 
-     * Returns a list of occupants if there is one, else returns an empty list
-     */
-    List<_Occupant> getOccupantsInLOS() {
-        return getOccupantsInDirection(direction());
     }
 
     /**
-     * Returns a list of occupants from the current location in a certain direction
-     * @param direction the direction to scan in
-     * @return 
-     * Returns a list of occupants that is in a certain direction
+     * Returns a list of occupants in the player's line of sight
+     *
+     * @return Returns a list of occupants if there is one, else returns an
+     * empty list
      */
-    List<_Occupant> getOccupantsInDirection(Direction direction) {
-        return getOccupantsInDirectionFrom(location(), direction);
+    <T extends _Occupant> List<T> getOccupantsInLOS(Class<T>... types) {
+        return getOccupantsInDirection(direction(), types);
     }
-    
+
     /**
-     * Returns a list of occupants that stem in a certain direction from a location
-     * @param location location to start search from
-     * @param direction direction to search in
-     * @return 
-     * Returns a list of occupants
+     * Returns a list of occupants from the current location in a certain
+     * direction
+     *
+     * @param direction the direction to scan in
+     * @return Returns a list of occupants that is in a certain direction
      */
-    List<_Occupant> getOccupantsInDirectionFrom(Location location, Direction direction) {        
+    <T extends _Occupant> List<T> getOccupantsInDirection(Direction direction, Class<T>... types) {
+        return getOccupantsInDirection(location(), direction, types);
+    }
+
+    /**
+     * Returns a list of occupants that stem in a certain direction from a
+     * location
+     *
+     * @param froLoc location to start search from
+     * @param direction direction to search in
+     * @return Returns a list of occupants
+     */
+    <T extends _Occupant> List<T> getOccupantsInDirection(Location froLoc, Direction direction, Class<T>... types) {
+        final List<T> results = new ArrayList<>();
+
+        OccupantReceiver receiver = new OccupantReceiver<T>() {
+            @Override
+            public void receiveOccupant(T o) {
+                results.add(o);
+            }
+        };
+
+        forEachOccupantInDirection(froLoc, direction, receiver, types);
+
+        return results;
+    }
+
+    <T extends _Occupant> void forEachOccupantInDirection(Location location, Direction direction, OccupantReceiver receiver, Class<T>... types) {
         Location offset = direction.directionOffset();
-        
-        List<_Occupant> results = new ArrayList<>();
-        
         Location l = location.plus(offset);
-        
+
         while (isValid(l)) {
             _Occupant occupant = getOccupant(l);
             if (occupant != null) {
-                results.add(occupant);
-            }
-            l.add(offset);
-        }
-        
-        return results;
-    }
-    
-    boolean isValid(Location l) {
-        return isValid(l.getRow(), l.getCol());
-    }
-
-    boolean isValid(int row, int col) {
-        return (row >= 0 && row < NUMROWS) &&
-               (col >= 0 && col < NUMCOLS);
-    }
-
-    // 'private' classes
-    abstract class _Occupant {
-
-        Location location;
-        int team;
-
-        _Occupant(Location location, int team) {
-            this.location = location;
-            this.team = team;
-        }
-
-    }
-
-    abstract class _Directional extends _Occupant {
-
-        Direction direction;
-
-        _Directional(Location location, Direction direction, int team) {
-            super(location, team);
-            this.direction = direction;
-        }
-
-        boolean facingLocation(Location dst) {
-            return direction.facingLocation(location, dst);
-        }
-        
-    }
-
-    class _Player extends _Directional {
-
-        int turnsUntilShoot;
-        int kills;
-        int frags;
-        int deaths;
-        int enemyBaseHits;
-        int selfBaseHits;
-        int score;
-
-        _Player(int row, int col, Direction direction, int team) {
-            super(new Location(row, col), direction, team);
-        }
-
-        _Player(Player p) {
-            this(p.getRow(), p.getCol(), Direction.fromDegrees(p.getDirection()), p.getTeam());
-            turnsUntilShoot = p.getTurnsUntilShoot();
-            kills = p.getKills();
-            frags = p.getFrags();
-            deaths = p.getDeaths();
-            enemyBaseHits = p.getEnemyBaseHits();
-            selfBaseHits = p.getSelfBaseHits();
-            score = p.getScore();
-        }
-        
-    }
-
-    class _Shot extends _Directional {
-
-        _Player owner;
-        boolean firstMove;
-
-        _Shot(int row, int col, Direction direction, int team) {
-            super(new Location(row, col), direction, team);
-        }
-
-        _Shot(Shot s) {
-            this(s.getRow(), s.getCol(), Direction.fromDegrees(s.getDirection()), s.getTeam());
-            owner = new _Player(s.getOwner());
-            // if shot is right next to its owner
-            firstMove = location.distanceTo(owner.location) == 1;
-        }
-
-        Location nextLocation() {
-            Location offset = direction.directionOffset();
-            if (firstMove) {
-                return location.plus(offset);
-            } else {
-                return location.plus(offset).plus(offset);
-            }
-        }
-        
-        /**
-         * Returns the number of player turns it takes for a bullet to reach
-         * to or beyond a location
-         * @param l
-         * @return 
-         * Returns the number of turns. Returns -1 if it will never reach.
-         */
-        int turnsToReach(Location l) {
-            if (!facingLocation(l)) {
-                return -1;
-            }
-            int distance = location.distanceTo(l);
-            if (firstMove) {
-                distance++;
-            }
-            return (distance + 1) / 2;
-        }
-        
-    }
-
-    class _Blocker extends _Occupant {
-
-        _Blocker(int row, int col) {
-            super(new Location(row, col), 0);
-        }
-
-        _Blocker(Blocker b) {
-            this(b.getRow(), b.getCol());
-        }
-        
-    }
-
-    class _Base extends _Occupant {
-
-        int numHits;
-
-        _Base(int row, int col, int team) {
-            super(new Location(row, col), team);
-        }
-
-        _Base(Base b) {
-            this(b.getRow(), b.getCol(), b.getTeam());
-            numHits = b.getNumHits();
-        }
-        
-    }
-
-}
-
-/**
- * A singleton class used to predict states based on
- * previous states
- */
-final class MarkovChain {
-
-    private static MarkovChain chain;
-
-    static MarkovChain getChain() {
-        if (chain == null) {
-            chain = new MarkovChain();
-        }
-        return chain;
-    }
-
-    private final Queue<GameState> states;
-    private final StateProcessor processor;
-
-    private MarkovChain() {
-        states = new ConcurrentLinkedQueue<>();
-        processor = new StateProcessor(this, states);
-        start();
-    }
-    
-    void start() {
-        processor.start();
-    }
-
-    /**
-     * Stops the StateProcessor from processing more states
-     */
-    void stopProcessing() {
-        processor.stopRunning();
-    }
-
-    /**
-     * Updates the state of the game.
-     * New state will be added to preexisting states
-     * for analysis.
-     * Restarts the StateProcessor if it's been stopped
-     * @param newState
-     */
-    void addState(GameState newState) {
-        states.add(newState);
-        processor.refresh();
-    }
-
-    private Prediction[] playerPredictions;
-
-    void setNumPlayers(int numPlayers) {
-        playerPredictions = new Prediction[numPlayers];
-    }
-
-    /**
-     * Predicts the next state based on past states
-     * @return
-     * returns the predicted state
-     */
-    synchronized GameState predictNextState() {
-        return null;
-    }
-
-}
-
-/**
- * Created by Yuhan on 5/15/16.
- */
-class StateProcessor extends Thread {
-
-    static final boolean OPT_TEAMMATES = false;
-    static final boolean OPT_ENEMIES   = false;
-    static final boolean OPT_SHOTS     = false;
-    static final boolean OPT_BARRIERS  = false;
-    static final boolean OPT_POINTS    = false;
-
-    static final int MAX_STATES = 100;
-
-    private final MarkovChain predChain;
-    private final Queue<GameState> states;
-    private Thread thread;
-
-    private boolean processing = true;
-
-    StateProcessor(MarkovChain predChain, Queue<GameState> states) {
-        this.predChain = predChain;
-        this.states = states;
-    }
-
-    @Override
-    public void run() {
-        GameState previousState = null;
-        while (processing) {
-            System.out.println("size" + states.size());
-            while (states.isEmpty()) {
-                synchronized (this) {
-                    try {
-                        wait();
-                    } catch (InterruptedException e) {
+                if (types.length == 0) {
+                    receiver.receiveOccupant(occupant);
+                } else {
+                    for (Class<T> type : types) {
+                        if (type.isInstance(occupant)) {
+                            receiver.receiveOccupant(occupant);
+                            break;
+                        }
                     }
                 }
             }
+            l.add(offset);
+        }
+    }
 
-            // remove excess states
-            int size = states.size();
-            if (size > MAX_STATES) {
-                int diff = size - MAX_STATES - 1;
-                while (diff-- > 0)
-                    states.remove();
-                previousState = states.poll();
+    /**
+     * Returns a list of Occupants within a certain distance (not raw distance)
+     *
+     * @param radius farthest distance from current location
+     * @return Returns a list of occupants
+     */
+    <T extends _Occupant> List<T> getOccupantsInArea(Location location, int radius, Class<T>... types) {
+        final List<T> results = new ArrayList<>();
+
+        OccupantReceiver receiver = new OccupantReceiver<T>() {
+            @Override
+            public void receiveOccupant(T o) {
+                results.add(o);
             }
+        };
 
-            try {
-                GameState newState;
-                synchronized (states) {
-                    newState = states.poll();
+        forEachOccupantInArea(location, radius, receiver, types);
+
+        return results;
+    }
+
+    <T extends _Occupant> void forEachOccupantInArea(Location location, int radius, OccupantReceiver receiver, Class<T>... types) {
+        int row = location.getRow();
+        int col = location.getCol();
+
+        int begr = Math.max(row - radius, 0);
+        int endr = Math.min(row + radius, NUMROWS - 1);
+
+        int begc = Math.max(col - radius, 0);
+        int endc = Math.min(col + radius, NUMCOLS - 1);
+
+        for (int r = begr; r <= endr; r++) {
+            for (int c = begc; c <= endc; c++) {
+                _Occupant occupant = getOccupant(r, c);
+                if (occupant != null) {
+                    if (types.length == 0) {
+                        receiver.receiveOccupant(occupant);
+                    } else {
+                        for (Class<T> type : types) {
+                            if (type.isInstance(occupant)) {
+                                receiver.receiveOccupant(occupant);
+                                break;
+                            }
+                        }
+                    }
                 }
-                if (previousState != null) {
-                    processState(previousState, newState);
-                }
-                previousState = newState;
-            } catch (NoSuchElementException e) {
-                System.out.println("Tried to remove element from empty queue\nError in concurrency code");
             }
         }
     }
 
-    @Override
-    public void start() {
-        if (this.thread == null) {
-            this.thread = new Thread(this, "StateProcessorThread");
+    abstract class OccupantReceiver<T extends _Occupant> {
+
+        boolean stop = false;
+
+        abstract void receiveOccupant(T o);
+    }
+
+    static boolean isValid(Location l) {
+        return isValid(l.getRow(), l.getCol());
+    }
+
+    static boolean isValid(int row, int col) {
+        return (row >= 0 && row < NUMROWS)
+                && (col >= 0 && col < NUMCOLS);
+    }
+}
+
+abstract class _Occupant {
+
+    Location location;
+    int team;
+
+    _Occupant(Location location, int team) {
+        this.location = location;
+        this.team = team;
+    }
+
+}
+
+abstract class _Directional extends _Occupant {
+
+    Direction direction;
+
+    _Directional(Location location, Direction direction, int team) {
+        super(location, team);
+        this.direction = direction;
+    }
+
+    boolean facingLocation(Location dst) {
+        return direction.facingLocation(location, dst);
+    }
+
+}
+
+abstract class _Immovable extends _Occupant {
+
+    public _Immovable(Location location, int team) {
+        super(location, team);
+    }
+
+}
+
+class _Player extends _Directional {
+
+    int turnsUntilShoot;
+    int kills;
+    int frags;
+    int deaths;
+    int enemyBaseHits;
+    int selfBaseHits;
+    int score;
+
+    _Player(int row, int col, Direction direction, int team) {
+        super(new Location(row, col), direction, team);
+    }
+
+    _Player(Player p) {
+        this(p.getRow(), p.getCol(), Direction.fromDegrees(p.getDirection()), p.getTeam());
+        turnsUntilShoot = p.getTurnsUntilShoot();
+        kills = p.getKills();
+        frags = p.getFrags();
+        deaths = p.getDeaths();
+        enemyBaseHits = p.getEnemyBaseHits();
+        selfBaseHits = p.getSelfBaseHits();
+        score = p.getScore();
+    }
+
+}
+
+class _Shot extends _Directional {
+
+    _Player owner;
+    boolean firstMove;
+
+    _Shot(int row, int col, Direction direction, int team) {
+        super(new Location(row, col), direction, team);
+    }
+
+    _Shot(Shot s) {
+        this(s.getRow(), s.getCol(), Direction.fromDegrees(s.getDirection()), s.getTeam());
+        owner = new _Player(s.getOwner());
+        // if shot is right next to its owner
+        firstMove = location.distanceTo(owner.location) == 1;
+    }
+
+    Location nextLocation() {
+        Location offset = direction.directionOffset();
+        if (firstMove) {
+            return location.plus(offset);
+        } else {
+            return location.plus(offset).plus(offset);
         }
-        this.thread.start();
     }
 
     /**
-     * Terminates thread
+     * Returns the number of player turns it takes for a bullet to reach to or
+     * beyond a location
+     *
+     * @param l
+     * @return Returns the number of turns. Returns -1 if it will never reach.
      */
-    synchronized void stopRunning() {
-        processing = false;
+    int turnsToReach(Location l) {
+        if (!facingLocation(l)) {
+            return -1;
+        }
+        int distance = location.distanceTo(l);
+        if (firstMove) {
+            distance++;
+        }
+        return (distance + 1) / 2;
     }
 
-    /**
-     * Restarts/refreshes the processing queue
-     */
-    synchronized void refresh() {
-        processing = true;
-        notify();
-    }
-
-    private void processState(GameState oldState, GameState newState) {
-        // TODO: implement
-    }
 }
 
-class Prediction {
-    
+class _Blocker extends _Immovable {
+
+    _Blocker(int row, int col) {
+        super(new Location(row, col), 0);
+    }
+
+    _Blocker(Blocker b) {
+        this(b.getRow(), b.getCol());
+    }
+
 }
 
-class Condition {
-    
+class _Base extends _Immovable {
+
+    int numHits;
+
+    _Base(int row, int col, int team) {
+        super(new Location(row, col), team);
+    }
+
+    _Base(Base b) {
+        this(b.getRow(), b.getCol(), b.getTeam());
+        numHits = b.getNumHits();
+    }
+
 }
 
 class Move {
@@ -965,7 +954,7 @@ enum Direction {
     SOUTHWEST,
     WEST,
     NORTHWEST;
-    
+
     static Direction fromDegrees(int degrees) {
         degrees %= 360;
         if (degrees < 0) {
@@ -982,67 +971,67 @@ enum Direction {
         int deg = toDegrees();
         return deg < 90 || deg > 270;
     }
-    
+
     boolean isSouth() {
         int deg = toDegrees();
         return deg > 90 && deg < 270;
     }
-    
+
     boolean isEast() {
         int deg = toDegrees();
         return deg > 0 && deg < 180;
     }
-    
+
     boolean isWest() {
         int deg = toDegrees();
         return deg > 180 && deg < 360;
     }
-    
+
     Location directionOffset() {
         int r = 0;
         int c = 0;
-        
+
         if (isNorth()) {
             r = -1;
         } else if (isSouth()) {
             r = 1;
         }
-        
+
         if (isEast()) {
             c = 1;
         } else if (isWest()) {
             c = -1;
         }
-        
+
         return new Location(r, c);
     }
-    
+
     @Override
     public String toString() {
         String r = "";
-        
+
         if (isNorth()) {
             r += "N";
         } else if (isSouth()) {
             r += "S";
         }
-        
+
         if (isEast()) {
             r += "E";
         } else if (isWest()) {
             r += "W";
         }
-        
+
         return r;
     }
 
     /**
      * Returns true if from is facing dst with direction
+     *
      * @param from
      * @param dst
-     * @return 
-     * Returns a boolean if from is facing dst with direction. Returns false
-     * if from == dst
+     * @return Returns a boolean if from is facing dst with direction. Returns
+     * false if from == dst
      */
     boolean facingLocation(Location from, Location dst) {
         if (from.equals(dst)) {
@@ -1079,22 +1068,22 @@ enum Direction {
             return this == Direction.SOUTHEAST;
         }
     }
-    
+
     /**
      * Gets the general direction of a location from another location
+     *
      * @param from starting position
      * @param dst ending position
-     * @return 
-     * Returns an approximate direction, null if dst == from
+     * @return Returns an approximate direction, null if dst == from
      */
     static Direction getGeneralDirection(Location from, Location dst) {
         boolean north, east, south, west;
-        
+
         north = dst.getRow() < from.getRow();
         south = dst.getRow() > from.getRow();
         east = dst.getCol() > from.getCol();
         west = dst.getCol() < from.getCol();
-        
+
         if (north) {
             if (east) {
                 return NORTHEAST;
@@ -1119,8 +1108,18 @@ enum Direction {
         if (west) {
             return WEST;
         }
-        
+
         return null;
+    }
+
+    /**
+     * Returns the direction in the opposite direction
+     *
+     * @return
+     */
+    Direction invertDirection() {
+        int deg = toDegrees();
+        return Direction.fromDegrees(deg + 180);
     }
 }
 
@@ -1152,7 +1151,7 @@ class Location {
 
     Location adjLocationInDir(Direction dir) {
         Location offset = dir.directionOffset();
-        
+
         return this.plus(offset);
     }
 
@@ -1180,6 +1179,7 @@ class Location {
 
     /**
      * Returns the distance from this to l in boxes
+     *
      * @param l
      * @return
      */
@@ -1195,48 +1195,49 @@ class Location {
         dX -= dY;
         return dX + dY;
     }
-    
+
     /**
      * Returns the Pythagorean distance
+     *
      * @param l
-     * @return 
-     * Returns a rounded Pythagorean distance.
+     * @return Returns a rounded Pythagorean distance.
      */
     int rawDistanceTo(Location l) {
         return (int) Math.sqrt((l.getCol() - this.getCol()) * (l.getCol() - this.getCol())
                 + (l.getRow() - this.getRow()) * (l.getRow() - this.getRow()));
     }
-    
+
     /**
      * Changes the current location by an offset
+     *
      * @param offset
-     * @return 
+     * @return
      */
     void add(Location offset) {
         this.row += offset.row;
         this.col += offset.col;
     }
-    
+
     /**
      * Returns the sum of this and l (treats as 2 vectors) as a new Location
+     *
      * @param l
-     * @return 
-     * Returns a new Location equal to the sum of this and l
+     * @return Returns a new Location equal to the sum of this and l
      */
     Location plus(Location l) {
         return new Location(this.row + l.row, this.col + l.col);
     }
-    
+
     /**
      * Returns the direction from this to l
+     *
      * @param l
-     * @return 
-     * Returns a direction from this to l
+     * @return Returns a direction from this to l
      */
     Direction directionTo(Location l) {
         return Direction.getGeneralDirection(this, l);
     }
-    
+
 }
 
 abstract class Instinct {
@@ -1257,5 +1258,166 @@ abstract class Instinct {
      * @return an array of scores, each corresponding to the move in m
      */
     abstract double[] rateMoves(List<Move> m, GameState s);
+
+}
+
+/**
+ * A singleton class used to predict states based on previous states
+ */
+final class MarkovChain {
+
+    private static MarkovChain chain;
+
+    static MarkovChain getChain() {
+        if (chain == null) {
+            chain = new MarkovChain();
+        }
+        return chain;
+    }
+
+    private final Queue<GameState> states;
+    private final StateProcessor processor;
+
+    private MarkovChain() {
+        states = new ConcurrentLinkedQueue<>();
+        processor = new StateProcessor(this, states);
+        start();
+    }
+
+    void start() {
+        processor.start();
+    }
+
+    /**
+     * Stops the StateProcessor from processing more states
+     */
+    void stopProcessing() {
+        processor.stopRunning();
+    }
+
+    /**
+     * Updates the state of the game. New state will be added to preexisting
+     * states for analysis. Restarts the StateProcessor if it's been stopped
+     *
+     * @param newState
+     */
+    void addState(GameState newState) {
+        states.add(newState);
+        processor.refresh();
+    }
+
+    private Prediction[] playerPredictions;
+
+    void setNumPlayers(int numPlayers) {
+        playerPredictions = new Prediction[numPlayers];
+    }
+
+    /**
+     * Predicts the next state based on past states
+     *
+     * @return returns the predicted state
+     */
+    synchronized GameState predictNextState() {
+        return null;
+    }
+
+}
+
+/**
+ * Created by Yuhan on 5/15/16.
+ */
+class StateProcessor extends Thread {
+
+    static final boolean OPT_TEAMMATES = false;
+    static final boolean OPT_ENEMIES = false;
+    static final boolean OPT_SHOTS = false;
+    static final boolean OPT_BARRIERS = false;
+    static final boolean OPT_POINTS = false;
+
+    static final int MAX_STATES = 100;
+
+    private final MarkovChain predChain;
+    private final Queue<GameState> states;
+    private Thread thread;
+
+    private boolean processing = true;
+
+    StateProcessor(MarkovChain predChain, Queue<GameState> states) {
+        this.predChain = predChain;
+        this.states = states;
+    }
+
+    @Override
+    public void run() {
+        GameState previousState = null;
+        while (processing) {
+            System.out.println("size" + states.size());
+            while (states.isEmpty()) {
+                synchronized (this) {
+                    try {
+                        wait();
+                    } catch (InterruptedException e) {
+                    }
+                }
+            }
+
+            // remove excess states
+            int size = states.size();
+            if (size > MAX_STATES) {
+                int diff = size - MAX_STATES - 1;
+                while (diff-- > 0) {
+                    states.remove();
+                }
+                previousState = states.poll();
+            }
+
+            try {
+                GameState newState;
+                synchronized (states) {
+                    newState = states.poll();
+                }
+                if (previousState != null) {
+                    processState(previousState, newState);
+                }
+                previousState = newState;
+            } catch (NoSuchElementException e) {
+                System.out.println("Tried to remove element from empty queue\nError in concurrency code");
+            }
+        }
+    }
+
+    @Override
+    public void start() {
+        if (this.thread == null) {
+            this.thread = new Thread(this, "StateProcessorThread");
+        }
+        this.thread.start();
+    }
+
+    /**
+     * Terminates thread
+     */
+    synchronized void stopRunning() {
+        processing = false;
+    }
+
+    /**
+     * Restarts/refreshes the processing queue
+     */
+    synchronized void refresh() {
+        processing = true;
+        notify();
+    }
+
+    private void processState(GameState oldState, GameState newState) {
+        // TODO: implement
+    }
+}
+
+class Prediction {
+
+}
+
+class Condition {
 
 }
