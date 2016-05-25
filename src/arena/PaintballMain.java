@@ -43,7 +43,7 @@ public class PaintballMain extends javax.swing.JFrame {
     private void reset() {
         //fill team rosters
         team = new Player[3][];
-        team[1] = new Player[40];
+        team[1] = new Player[14];
         team[2] = new Player[1];
         for (int i = 0; i < team[1].length; i++) {
             team[1][i] = new Player(1, new Sprinkler());
@@ -98,7 +98,7 @@ public class PaintballMain extends javax.swing.JFrame {
         new Blocker().addSelfToBoard(board, 16, 45);
         new Blocker().addSelfToBoard(board, 12, 45);
         new Blocker().addSelfToBoard(board, 20, 45);
-        final int NUM_BLOCKS_PER_SIDE = 0;
+        final int NUM_BLOCKS_PER_SIDE = 50;
         for (int i = 0; i < NUM_BLOCKS_PER_SIDE; ) {
             int row = randGen.nextInt(33);
             int col = randGen.nextInt(25);

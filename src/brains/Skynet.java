@@ -57,19 +57,12 @@ public class Skynet implements Brain {
         return Color.MAGENTA;
     }
 
-    private int deaths = 0;
-
     @Override
     public Action getMove(Player p, Board b) {
-        int d = p.getDeaths();
-        if (d > deaths) {
-            System.out.println("Just respawned");
-            deaths = d;
-        }
         GameState state = new GameState(p, b);
-        System.out.println("\n");
+
         Move bestMove = behavior.getMove(state);
-        System.out.println("Chose move: " + bestMove);
+
         return bestMove.getAction();
     }
 
@@ -187,122 +180,83 @@ class SurvivalInstinct extends Instinct {
      */
     @Override
     double[] rateMoves(List<Move> moves, GameState state) {
-        String debugString = "";
+        System.out.println("NEW RATING:");
         double[] scores = new double[moves.size()];
-        Location currLoc = state.location();
-        debugString += "Curr loc " + currLoc + "\n";
 
-        List<_Shot> shotsFacing = state.getDirectionalsFacing(currLoc, _Shot.class);
-        List<_Player> playersFacing = state.getDirectionalsFacing(currLoc, _Player.class);
+        Location currLocation = state.location();
 
-        debugString += shotsFacing.size() + " shots facing currLoc\n";
-
-        _Shot closestShot = null;
-        if (shotsFacing.size() > 0) {
-            closestShot = shotsFacing.get(0);
-            for (_Shot shot : shotsFacing) {
-                if (shot.location.distanceTo(currLoc) < closestShot.location.distanceTo(currLoc)) {
-                    closestShot = shot;
-                }
+        double stayScore = rateLocation(currLocation, state);
+        System.out.println("Stay score: \t" + stayScore);
+        for (int moveInd = 0; moveInd < scores.length; moveInd++) {
+            Move move = moves.get(moveInd);
+            if (move.getMoveType() != Move.MoveType.MOVE) {
+                scores[moveInd] = stayScore;
+                continue;
             }
-        }
 
-        _Player closestEnemyPlayer = null;
-        _Player closestFriendlyPlayer = null;
-        if (playersFacing.size() > 0) {
-            for (int i = 0; i < playersFacing.size(); i++) {
-                _Player p = playersFacing.get(i);
-                if (p.team != state.team()) {
-                    if (closestEnemyPlayer != null) {
-                        if (p.location.distanceTo(currLoc) < closestEnemyPlayer.location.distanceTo(currLoc)) {
-                            closestEnemyPlayer = p;
-                        }
-                    } else {
-                        closestEnemyPlayer = p;
-                    }
-                } else if (closestFriendlyPlayer != null) {
-                    if (p.location.distanceTo(currLoc) < closestFriendlyPlayer.location.distanceTo(currLoc)) {
-                        closestFriendlyPlayer = p;
-                    }
-                } else {
-                    closestFriendlyPlayer = p;
-                }
+            Location dstLocation = move.locationAfterMove(currLocation, state);
+
+            System.out.print(move.toString() + "\t");
+            scores[moveInd] += rateLocation(dstLocation, state);
+            System.out.println(scores[moveInd]);
+            if (dstLocation.distanceTo(state.center()) < currLocation.distanceTo(state.center())) {
+                scores[moveInd] += 1;
             }
+
         }
-
-        for (int i = 0; i < moves.size(); i++) {
-            String moveString = "";
-            Move move = moves.get(i);
-            Move.MoveType moveType = move.getMoveType();
-
-            switch (moveType) {
-                case SHOOT:
-                    if (shotsFacing.size() == 8) { //surrounded
-                        scores[i] += 100;
-                    }
-                case TURN:
-                    if (shotsFacing.size() >= 4) {
-                        Direction direction = move.getDirection();
-
-                        if (direction.equals(currLoc.directionTo(closestEnemyPlayer.location))) {
-                            scores[i] += 10;
-                        }
-                    }
-                default:
-                    Location dst = move.locationAfterMove(currLoc, state);
-                    moveString += "Move: " + moveType + " " + move.getDirection() + "\n";
-                    moveString += "Dst " + dst + "\n";
-                    if (state.isShot(dst)) {
-                        scores[i] -= 800;
-                    }
-                    if (dst.distanceTo(state.center()) < currLoc.distanceTo(state.center())) {
-                        scores[i] += 5;
-                    }
-//                    double[] oldShotScores = new double[shotsFacing.size()];
-//                    for (int j = 0; j < shotsFacing.size(); j++) {
-//                        oldShotScores[j] = rateDirectional(shotsFacing.get(j), currLoc, state);
-//                    }
-
-                    List<_Shot> newShotsFacing = state.getDirectionalsFacing(dst, _Shot.class);
-                    if (newShotsFacing.size() > 0) {
-                        moveString += newShotsFacing.size() + " shots facing dst\n";
-                    }
-
-                    double[] newShotScores = new double[newShotsFacing.size()];
-                    for (int j = 0; j < newShotScores.length; j++) {
-                        newShotScores[j] = rateDirectional(newShotsFacing.get(j), dst, state);
-                    }
-
-                    Arrays.sort(newShotScores);
-                    for (int j = newShotScores.length - 1; j >= 0; j--) {
-                        if (newShotScores[j] <= -199) {
-                            scores[i] += -800;
-                        } else {
-                            scores[i] += newShotScores[j] / (j * j);
-                        }
-                    }
-
-                    List<_Player> newPlayersFacing = state.getDirectionalsFacing(dst, _Player.class);
-                    double[] newPlayerScores = new double[newPlayersFacing.size()];
-                    for (int j = 0; j < newPlayerScores.length; j++) {
-                        newPlayerScores[j] = rateDirectional(newPlayersFacing.get(j), dst, state);
-                    }
-                    Arrays.sort(newPlayerScores);
-
-                    double playerWeight = newPlayerScores.length;
-                    for (double score : newPlayerScores) {
-                        scores[i] += score / (Math.pow(playerWeight, 2) * 40);
-                        playerWeight--;
-                    }
-                    
-                    moveString = scores[i] + "\n" + moveString;
-                    debugString += moveString;
-                    break;
-            }
-        }
-        System.out.println(debugString);
-
+        System.out.println("");
         return scores;
+    }
+
+    private double rateLocation(Location location, GameState state) {
+        double result = 0;
+
+        if (state.isShot(location)) {
+            return rateDistance(0);
+        }
+
+        List<_Shot> shotsFacingDst = state.getDirectionalsFacing(location, _Shot.class);
+        double[] shotScores = new double[shotsFacingDst.size()];
+        double max = Double.NEGATIVE_INFINITY;
+        for (int i = 0; i < shotScores.length; i++) {
+            double score = rateDirectional(shotsFacingDst.get(i), location, state);
+            if (score <= -190) {
+                System.out.println("Found fatal shot");
+                score = -900;
+            }
+            if (max < score) {
+                max = score;
+            }
+            score *= score;
+            shotScores[i] = score;
+        }
+        for (int i = 0; i < shotScores.length; i++) {
+            shotScores[i] /= max;
+        }
+
+        List<_Player> playersFacingDst = state.getDirectionalsFacing(location, _Player.class);
+        double[] playerScores = new double[playersFacingDst.size()];
+        max = Double.NEGATIVE_INFINITY;
+        for (int i = 0; i < playerScores.length; i++) {
+            double score = rateDirectional(playersFacingDst.get(i), location, state);
+            if (max < score) {
+                max = score;
+            }
+            score *= score;
+            playerScores[i] = score;
+        }
+        for (int i = 0; i < playerScores.length; i++) {
+            playerScores[i] /= max * 1.5;
+        }
+
+        for (double score : shotScores) {
+            result += score;
+        }
+        System.out.println("Result: \t" + result);
+        for (double score : playerScores) {
+            result += score;
+        }
+        return result;
     }
 
     // For _Shots
@@ -319,28 +273,11 @@ class SurvivalInstinct extends Instinct {
         int distance = directionalLoc.distanceTo(location);
         score = rateDistance(distance);
 
-        Direction facingDir = directionalLoc.directionTo(location);
-        List<_Shot> shotsInDirectionalPath = state.getOccupantsInDirection(directionalLoc, facingDir, _Shot.class);
-
-        for (_Shot shot : shotsInDirectionalPath) {
-            int shotDistance = shot.location.distanceTo(directionalLoc);
-            if (shotDistance >= location.distanceTo(directionalLoc)) {
-                break;
-            } else if (shot.facingLocation(directionalLoc)) {
-                double sScore = -rateDistance(shotDistance);
-                score *= Math.min(1.0, sScore / 200.0);
-            }
-        }
-
         return score;
     }
 
     private double rateDistance(int distance) {
-        if (distance <= 10) {
-            return 12.5 * distance - 225.0;
-        } else {
-            return 2.5 * distance - 125.0;
-        }
+        return -2441.4 / (distance + 8.5) + 31.7;
     }
 
 }
@@ -1003,6 +940,14 @@ class Move {
     @Override
     public String toString() {
         return moveType.toString() + " in direction: " + direction.toString();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o instanceof Move) {
+            return this.moveType == ((Move) o).moveType && this.direction == ((Move) o).direction;
+        }
+        return false;
     }
 
 }
