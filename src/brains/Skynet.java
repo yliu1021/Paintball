@@ -57,13 +57,19 @@ public class Skynet implements Brain {
         return Color.MAGENTA;
     }
 
+    private int deaths = 0;
+
     @Override
     public Action getMove(Player p, Board b) {
-        long start = System.nanoTime();
+        int d = p.getDeaths();
+        if (d > deaths) {
+            System.out.println("Just respawned");
+            deaths = d;
+        }
         GameState state = new GameState(p, b);
-
+        System.out.println("\n");
         Move bestMove = behavior.getMove(state);
-
+        System.out.println("Chose move: " + bestMove);
         return bestMove.getAction();
     }
 
@@ -181,11 +187,15 @@ class SurvivalInstinct extends Instinct {
      */
     @Override
     double[] rateMoves(List<Move> moves, GameState state) {
+        String debugString = "";
         double[] scores = new double[moves.size()];
         Location currLoc = state.location();
+        debugString += "Curr loc " + currLoc + "\n";
 
-        List<_Shot> shotsFacing = state.getFacingDirectionalsOfType(currLoc, _Shot.class);
-        List<_Player> playersFacing = state.getFacingDirectionalsOfType(currLoc, _Player.class);
+        List<_Shot> shotsFacing = state.getDirectionalsFacing(currLoc, _Shot.class);
+        List<_Player> playersFacing = state.getDirectionalsFacing(currLoc, _Player.class);
+
+        debugString += shotsFacing.size() + " shots facing currLoc\n";
 
         _Shot closestShot = null;
         if (shotsFacing.size() > 0) {
@@ -221,28 +231,76 @@ class SurvivalInstinct extends Instinct {
         }
 
         for (int i = 0; i < moves.size(); i++) {
+            String moveString = "";
             Move move = moves.get(i);
             Move.MoveType moveType = move.getMoveType();
 
             switch (moveType) {
-                case MOVE:
-                    Location dst = move.locationAfterMove(currLoc, state);
-
-                    break;
-                case TURN:
-                    if (shotsFacing.size() >= 4) {
-
-                    }
-                    break;
                 case SHOOT:
                     if (shotsFacing.size() == 8) { //surrounded
                         scores[i] += 100;
                     }
-                    break;
+                case TURN:
+                    if (shotsFacing.size() >= 4) {
+                        Direction direction = move.getDirection();
+
+                        if (direction.equals(currLoc.directionTo(closestEnemyPlayer.location))) {
+                            scores[i] += 10;
+                        }
+                    }
                 default:
+                    Location dst = move.locationAfterMove(currLoc, state);
+                    moveString += "Move: " + moveType + " " + move.getDirection() + "\n";
+                    moveString += "Dst " + dst + "\n";
+                    if (state.isShot(dst)) {
+                        scores[i] -= 800;
+                    }
+                    if (dst.distanceTo(state.center()) < currLoc.distanceTo(state.center())) {
+                        scores[i] += 5;
+                    }
+//                    double[] oldShotScores = new double[shotsFacing.size()];
+//                    for (int j = 0; j < shotsFacing.size(); j++) {
+//                        oldShotScores[j] = rateDirectional(shotsFacing.get(j), currLoc, state);
+//                    }
+
+                    List<_Shot> newShotsFacing = state.getDirectionalsFacing(dst, _Shot.class);
+                    if (newShotsFacing.size() > 0) {
+                        moveString += newShotsFacing.size() + " shots facing dst\n";
+                    }
+
+                    double[] newShotScores = new double[newShotsFacing.size()];
+                    for (int j = 0; j < newShotScores.length; j++) {
+                        newShotScores[j] = rateDirectional(newShotsFacing.get(j), dst, state);
+                    }
+
+                    Arrays.sort(newShotScores);
+                    for (int j = newShotScores.length - 1; j >= 0; j--) {
+                        if (newShotScores[j] <= -199) {
+                            scores[i] += -800;
+                        } else {
+                            scores[i] += newShotScores[j] / (j * j);
+                        }
+                    }
+
+                    List<_Player> newPlayersFacing = state.getDirectionalsFacing(dst, _Player.class);
+                    double[] newPlayerScores = new double[newPlayersFacing.size()];
+                    for (int j = 0; j < newPlayerScores.length; j++) {
+                        newPlayerScores[j] = rateDirectional(newPlayersFacing.get(j), dst, state);
+                    }
+                    Arrays.sort(newPlayerScores);
+
+                    double playerWeight = newPlayerScores.length;
+                    for (double score : newPlayerScores) {
+                        scores[i] += score / (Math.pow(playerWeight, 2) * 40);
+                        playerWeight--;
+                    }
+                    
+                    moveString = scores[i] + "\n" + moveString;
+                    debugString += moveString;
                     break;
             }
         }
+        System.out.println(debugString);
 
         return scores;
     }
@@ -252,18 +310,16 @@ class SurvivalInstinct extends Instinct {
     // > -100 is danger
     // Players rated the same way
     private double rateDirectional(_Directional directional, Location location, GameState state) {
+        if (!directional.facingLocation(location)) {
+            return 0;
+        }
         double score;
 
         Location directionalLoc = directional.location;
         int distance = directionalLoc.distanceTo(location);
-        if (distance <= 10) { //at most 4 moves to get away
-            score = 12.5 * distance - 225.0;
-        } else {
-            score = 2.5 * distance - 125;
-        }
+        score = rateDistance(distance);
 
         Direction facingDir = directionalLoc.directionTo(location);
-
         List<_Shot> shotsInDirectionalPath = state.getOccupantsInDirection(directionalLoc, facingDir, _Shot.class);
 
         for (_Shot shot : shotsInDirectionalPath) {
@@ -271,17 +327,20 @@ class SurvivalInstinct extends Instinct {
             if (shotDistance >= location.distanceTo(directionalLoc)) {
                 break;
             } else if (shot.facingLocation(directionalLoc)) {
-                double sScore;
-                if (shotDistance <= 10) {
-                    sScore = 225.0 - 12.5 * distance;
-                } else {
-                    sScore = 125.0 - 2.5 * distance ;
-                }
-                score *= Math.min(1.0, sScore / 175.0);
+                double sScore = -rateDistance(shotDistance);
+                score *= Math.min(1.0, sScore / 200.0);
             }
         }
 
         return score;
+    }
+
+    private double rateDistance(int distance) {
+        if (distance <= 10) {
+            return 12.5 * distance - 225.0;
+        } else {
+            return 2.5 * distance - 125.0;
+        }
     }
 
 }
@@ -342,9 +401,13 @@ class GameState {
 
     private _Player player;
 
+    private Location center;
+
     GameState(Player p, Board b) {
         NUMCOLS = b.numCols();
         NUMROWS = b.numRows();
+
+        center = new Location(NUMROWS / 2, NUMCOLS / 2);
 
         player = new _Player(p);
 
@@ -371,6 +434,10 @@ class GameState {
                 occupants[r][c] = o2;
             }
         }
+    }
+
+    Location center() {
+        return center;
     }
 
     // Methods for accessing information about the
@@ -528,7 +595,7 @@ class GameState {
      * @return A list of locations that indicate where the occupants are
      */
     <T extends _Directional> List<T> getFacingDirectionals(Class<T>... types) {
-        return getFacingDirectionalsOfType(location(), types);
+        return getDirectionalsFacing(location(), types);
     }
 
     /**
@@ -538,11 +605,7 @@ class GameState {
      * @param l location to check from
      * @return A list of locations that indicate where the occupants are
      */
-    <T extends _Directional> List<T> getFacingDirectionals(Location l, Class<T>... types) {
-        return getFacingDirectionalsOfType(l, types);
-    }
-
-    <T extends _Directional> List<T> getFacingDirectionalsOfType(final Location l, final Class<T>... types) {
+    <T extends _Directional> List<T> getDirectionalsFacing(final Location l, final Class<T>... types) {
         final List<T> locations = new ArrayList<>();
         if (!isValid(l)) {
             return locations;
