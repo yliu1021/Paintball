@@ -22,23 +22,23 @@ public class Skynet implements Brain {
     private Behavior behavior;
 
     public Skynet() {
-        this(1);
+        this(5);
     }
 
     public Skynet(int difficulty) {
-        behavior = new Behavior(new SurvivalInstinct());
+        behavior = new Behavior(new SurvivalInstinct(10000));
 
         if (difficulty > 1) {
-            behavior.addInstinct(new ShootEnemyInstinct());
+            behavior.addInstinct(new ShootEnemyBaseInstinct(1000));
         }
         if (difficulty > 2) {
-            behavior.addInstinct(new ShootEnemyBaseInstinct());
+            behavior.addInstinct(new ShootEnemyInstinct(100));
         }
         if (difficulty > 3) {
-            behavior.addInstinct(new DefendBaseInstinct());
+            behavior.addInstinct(new DefendBaseInstinct(10));
         }
         if (difficulty > 4) {
-            behavior.addInstinct(new DefendFriendlyInstinct());
+            behavior.addInstinct(new DefendFriendlyInstinct(1));
         }
     }
 
@@ -212,10 +212,21 @@ class SurvivalInstinct extends Instinct {
                 numValidMoveLocations++;
             }
             scores[moveInd] += score;
-            
+
             if (dstLocation.distanceTo(state.center()) < currLocation.distanceTo(state.center())) {
                 scores[moveInd] += 1;
             }
+        }
+
+        if (shotsFacingCurrLoc.isEmpty()) {
+            for (int moveInd = 0; moveInd < scores.length; moveInd++) {
+                Move move = moves.get(moveInd);
+                if (move.getMoveType() == Move.MoveType.MOVE) {
+                    continue;
+                }
+                scores[moveInd] += stayScore;
+            }
+            return scores;
         }
 
         Location closestShotLocation = shotsFacingCurrLoc.get(0).location;
@@ -225,16 +236,14 @@ class SurvivalInstinct extends Instinct {
                 closestShotLocation = shotLocation;
             }
         }
-        
+        Direction dirToClosestShot = currLocation.generalDirectionTo(closestShotLocation);
+
         for (int moveInd = 0; moveInd < scores.length; moveInd++) {
             Move move = moves.get(moveInd);
             if (move.getMoveType() == Move.MoveType.MOVE) {
-                break;
-            }
-            scores[moveInd] += stayScore;
-            if (shotsFacingCurrLoc.isEmpty()) {
                 continue;
             }
+            scores[moveInd] += stayScore;
 
             if (move.getMoveType() == Move.MoveType.TURN) {
                 int numCloseShots = 0;
@@ -243,8 +252,8 @@ class SurvivalInstinct extends Instinct {
                         numCloseShots++;
                     }
                 }
-                if (numCloseShots - numValidMoveLocations > 2) {
-                    if (move.getDirection().equals(currLocation.directionTo(closestShotLocation))) {
+                if (numCloseShots - numValidMoveLocations > 0) {
+                    if (move.getDirection() == dirToClosestShot) {
                         scores[moveInd] += 60;
                     }
                 }
@@ -255,9 +264,9 @@ class SurvivalInstinct extends Instinct {
                         numCloseShots++;
                     }
                 }
-                
-                if (numCloseShots >= 6) {
-                    
+
+                if (numCloseShots >= 3 && state.direction().equals(dirToClosestShot)) {
+                    scores[moveInd] += 60;
                 }
             }
         }
@@ -277,7 +286,7 @@ class SurvivalInstinct extends Instinct {
         if (numShotsFacing > 0) {
             double[] shotScores = new double[numShotsFacing];
             double min;
-            double penalty = 95;
+            double penalty = 150;
             double threshold = -185;
             double score = rateDirectional(shotsFacingDst.get(0), location, state);
             min = score;
@@ -329,7 +338,7 @@ class SurvivalInstinct extends Instinct {
             }
 //            System.out.println("\tplayer min score: " + min);
             for (int i = 0; i < numPlayersFacing; i++) {
-                playerScores[i] /= min * (numPlayersFacing - i) * 1.3;
+                playerScores[i] /= min * (numPlayersFacing - i) * 1.2;
             }
 
             for (double s : playerScores) {
@@ -340,7 +349,7 @@ class SurvivalInstinct extends Instinct {
         List<_Shot> shotsInArea = state.getOccupantsInArea(location, 5, _Shot.class);
         for (_Shot shot : shotsInArea) {
             Direction shotDirection = shot.direction;
-            Direction directionToShot = location.directionTo(shot.location);
+            Direction directionToShot = location.generalDirectionTo(shot.location);
 
             int nShotDirection = (shotDirection.toDegrees() + 180) % 180;
             int dDeg = Math.abs(nShotDirection - directionToShot.toDegrees());
@@ -382,22 +391,80 @@ class SurvivalInstinct extends Instinct {
 
 }
 
-class ShootEnemyInstinct extends Instinct {
+class ShootEnemyBaseInstinct extends Instinct {
 
+    private double weight;
+
+    public ShootEnemyBaseInstinct(double weight) {
+        this.weight = weight;
+    }
+    
     @Override
-    double[] rateMoves(List<Move> m, GameState s) {
-        double[] scores = new double[m.size()];
+    double getWeight() {
+        return weight;
+    }
+    
+    @Override
+    double[] rateMoves(List<Move> moves, GameState state) {
+        double[] scores = new double[moves.size()];
+
+        Location currLocation = state.location();
+        Location enemyBaseLocation = state.getEnemyBase().location;
+
+        for (int moveInd = 0; moveInd < scores.length; moveInd++) {
+            Move move = moves.get(moveInd);
+
+            switch (move.getMoveType()) {
+                case MOVE:
+                    Location dstLocation = move.locationAfterMove(currLocation, state);
+                    if (currLocation.distanceTo(enemyBaseLocation) <= 3) {
+                        if (dstLocation.canFace(enemyBaseLocation)) {
+                            scores[moveInd] += 5;
+                        }
+                    } else if (dstLocation.distanceTo(enemyBaseLocation) < currLocation.distanceTo(enemyBaseLocation)) {
+                        scores[moveInd] += 5;
+                    }
+                    break;
+                case TURN:
+                    if (currLocation.distanceTo(enemyBaseLocation) <= 3) {
+                        if (currLocation.canFace(enemyBaseLocation)) {
+                            Direction directionToEnemyBase = currLocation.generalDirectionTo(enemyBaseLocation);
+                            if (move.getDirection() == directionToEnemyBase) {
+                                scores[moveInd] += 5;
+                            }
+                        }
+                    }
+                case SHOOT:
+                    if (currLocation.distanceTo(enemyBaseLocation) <= 3) {
+                        if (state.facing(enemyBaseLocation)) {
+                            System.out.println("Shooting");
+                            scores[moveInd] += 50;
+                        }
+                    }
+            }
+        }
 
         return scores;
     }
 
 }
 
-class ShootEnemyBaseInstinct extends Instinct {
+class ShootEnemyInstinct extends Instinct {
 
+    private double weight;
+    
+    ShootEnemyInstinct(double weight) {
+        this.weight = weight;
+    } 
+    
     @Override
-    double[] rateMoves(List<Move> m, GameState s) {
-        double[] scores = new double[m.size()];
+    double getWeight() {
+        return weight;
+    }
+    
+    @Override
+    double[] rateMoves(List<Move> moves, GameState state) {
+        double[] scores = new double[moves.size()];
 
         return scores;
     }
@@ -406,9 +473,20 @@ class ShootEnemyBaseInstinct extends Instinct {
 
 class DefendBaseInstinct extends Instinct {
 
+    private double weight;
+
+    public DefendBaseInstinct(double weight) {
+        this.weight = weight;
+    }
+        
     @Override
-    double[] rateMoves(List<Move> m, GameState s) {
-        double[] scores = new double[m.size()];
+    double getWeight() {
+        return weight;
+    }
+    
+    @Override
+    double[] rateMoves(List<Move> moves, GameState state) {
+        double[] scores = new double[moves.size()];
 
         return scores;
     }
@@ -417,9 +495,20 @@ class DefendBaseInstinct extends Instinct {
 
 class DefendFriendlyInstinct extends Instinct {
 
+    private double weight;
+
+    public DefendFriendlyInstinct(double weight) {
+        this.weight = weight;
+    }
+       
     @Override
-    double[] rateMoves(List<Move> m, GameState s) {
-        double[] scores = new double[m.size()];
+    double getWeight() {
+        return weight;
+    }       
+    
+    @Override
+    double[] rateMoves(List<Move> moves, GameState states) {
+        double[] scores = new double[moves.size()];
 
         return scores;
     }
@@ -489,6 +578,10 @@ class GameState {
 
     Direction direction() {
         return player.direction;
+    }
+
+    boolean facing(Location l) {
+        return player.facingLocation(l);
     }
 
     boolean canMove(Move move) {
@@ -1345,10 +1438,18 @@ class Location {
      * @param l
      * @return Returns a direction from this to l
      */
-    Direction directionTo(Location l) {
+    Direction generalDirectionTo(Location l) {
         return Direction.getGeneralDirection(this, l);
     }
 
+    boolean canFace(Location l) {
+        if (l.row == this.row || l.col == this.col) {
+            return true;
+        } else if (Math.abs(l.row - this.row) == Math.abs(l.col - this.col)) {
+            return true;
+        }
+        return false;
+    }
 }
 
 abstract class Instinct {
