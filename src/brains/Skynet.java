@@ -22,7 +22,7 @@ public class Skynet implements Brain {
     private Behavior behavior;
 
     public Skynet() {
-        this(2);
+        this(1);
     }
 
     public Skynet(int difficulty) {
@@ -191,91 +191,122 @@ class SurvivalInstinct extends Instinct {
 
         Location currLocation = state.location();
 
-        int scanRadius = 5;
-        LocationRatings locationRatings = new LocationRatings(scanRadius);
-        rateShotLocations(locationRatings, scanRadius, state);
+        int scanRadius = 7;
+        LocationRatings<Integer> shotRatings = new LocationRatings(scanRadius, currLocation, -1);
+        setShotScores(shotRatings, scanRadius, state);
+        LocationRatings<Integer> playerRatings = new LocationRatings(scanRadius - 2, currLocation, -1);
+        setPlayerScores(playerRatings, scanRadius - 2, state);
+        LocationRatings<Boolean> immovableRatings = new LocationRatings(scanRadius - 4, currLocation, false);
+        setImmovableScores(immovableRatings, scanRadius - 4, state);
+        
+        //Locations that won't get killed the next turn
+        ArrayList<Location> safeLocations = new ArrayList(8);
+
+        //Setup possible moves
+        for (Move move : moves) {
+            Move.MoveType moveType = move.getMoveType();
+            if (moveType == Move.MoveType.MOVE || moveType == Move.MoveType.PASS) {
+                Location dst = move.locationAfterMove(currLocation, state);
+                safeLocations.add(dst);
+            }
+        }
+
+        //Remove locations that are close to bullets
+        for (int i = safeLocations.size() - 1; i >= 0; i--) {
+            Location location = safeLocations.get(i);
+            int sScore = shotRatings.getScore(location);
+            if (sScore >= 0 && sScore <= 2) {
+                safeLocations.remove(i);
+            }
+        }
+        
+        for (int moveInd = 0; moveInd < moveScores.length; moveInd++) {
+            Move move = moves.get(moveInd);
+            switch (move.getMoveType()) {
+//                case SHOOT:
+//                    if (bulletfreeLocations.isEmpty()) { // if there's nowhere safe to go, just shoot
+//                        moveScores[moveInd] += 10;
+//                        break;
+//                    }
+//                    if (safeLocations.isEmpty()) {
+//                        Location shotDirectionOffset = state.direction().directionOffset();
+//                        Location shotLocation = currLocation.plus(shotDirectionOffset);
+//                        if () {
+//                            
+//                        }
+//                    }
+                case PASS:
+                case MOVE:
+                    Location dst = move.locationAfterMove(currLocation, state);
+
+                    //don't move there if it's an unsafe move
+                    int shotRating = shotRatings.getScore(dst);
+                    if (shotRating >= 0 && shotRating <= 1) {
+                        moveScores[moveInd] -= 20;
+                        break;
+                    }
+
+                    if (shotRating >= 2 && shotRating <= 3) {
+                        moveScores[moveInd] -= 10;
+                        break;
+                    }
+
+                    int score = shotRatings.getScore(dst);
+                    moveScores[moveInd] += score;
+                    break;
+            }
+        }
 
         return moveScores;
     }
 
-    void rateShotLocations(LocationRatings locationRatings, int scanRadius, GameState state) {
+    void setShotScores(LocationRatings<Integer> locationRatings, int scanRadius, GameState state) {
         Location currLocation = state.location();
         List<_Shot> shots = state.getOccupantsInArea(currLocation, scanRadius + 2, _Shot.class);
         for (_Shot shot : shots) {
-            int[] index;
-            Location shotLocation = shot.location.copy();
             Location directionOffset = shot.direction.directionOffset();
-            for (index = indexFromLocation(shotLocation, currLocation);
-                    GameState.isValid(shotLocation)
-                    && !state.isType(shotLocation, _Immovable.class); // haven't encountered blocker
+            for (Location shotLocation = shot.location.copy();
+                    GameState.isValid(shotLocation) && !state.isType(shotLocation, _Immovable.class); // hasn't encountered blocker
                     shotLocation.add(directionOffset) /* increment */) {
-                if (!locationRatings.isValid(index[0], index[1])) {
+                if (!locationRatings.isValid(shotLocation)) {
                     continue;
                 }
                 int turnsToHit = shot.turnsToReach(shotLocation);
-                locationRatings.setScore(-64 * Math.pow(0.5, turnsToHit), index[0], index[1]);
+                locationRatings.setScore(turnsToHit, shotLocation);
             }
         }
     }
 
-    void ratePlayerLocations(LocationRatings locationRatings, int scanRadius, GameState state) {
+    void setPlayerScores(LocationRatings<Integer> locationRatings, int scanRadius, GameState state) {
         Location currLocation = state.location();
         List<_Player> players = state.getOccupantsInArea(currLocation, scanRadius + 1, _Player.class);
         for (_Player player : players) {
             Location directionOffset = player.direction.directionOffset();
-            Location playerLocation = player.location.copy();
-            int[] index;
-            for (index = indexFromLocation(playerLocation, currLocation);
-                    GameState.isValid(playerLocation)
-                    && locationRatings.isValid(index[0], index[1])
-                    && !state.isType(currLocation, _Immovable.class);
+            for (Location playerLocation = player.location.copy();
+                    GameState.isValid(playerLocation) && !state.isType(currLocation, _Immovable.class);
                     playerLocation.add(directionOffset)) {
+                if (!locationRatings.isValid(playerLocation)) {
+                    continue;
+                }
                 int distance = playerLocation.distanceTo(currLocation);
                 if (distance <= 4) {
-                    locationRatings.setScore(-32 * Math.pow(0.5, (distance + 1) / 2), index[0], index[1]);
+                    locationRatings.setScore((distance + 1) / 2, playerLocation);
                 } else {
-                    locationRatings.setScore(-2, index[0], index[1]);
+                    locationRatings.setScore(distance, playerLocation);
                 }
             }
         }
     }
 
-    int[] indexFromLocation(Location location, Location currLocation) {
-        int[] result = new int[2];
-        result[0] = location.getRow() - currLocation.getRow();
-        result[1] = location.getCol() - currLocation.getCol();
-        return result;
+    void setImmovableScores(LocationRatings<Boolean> locationRatings, int scanRadius, GameState state) {
+        for (int r = locationRatings.radius - scanRadius; r < locationRatings.radius + scanRadius; r++) {
+            for (int c = locationRatings.radius - scanRadius; c < locationRatings.radius + scanRadius; c++) {
+                if (!GameState.isValid(r, c) || state.isType(r, c, _Immovable.class)) {
+                    locationRatings.setScore(true, r, c);
+                }
+            }
+        }
     }
-
-    class LocationRatings {
-
-        private double scores[][];
-        private int radius;
-
-        public LocationRatings(int radius) {
-            scores = new double[radius * 2 + 1][radius * 2 + 1];
-            this.radius = radius;
-        }
-
-        void setScore(double value, int dy, int dx) {
-            int r = radius + dy;
-            int c = radius + dx;
-            scores[r][c] = Math.min(scores[r][c], value);
-
-        }
-
-        double getScore(int dy, int dx) {
-            int r = radius + dy;
-            int c = radius + dx;
-            return scores[r][c];
-        }
-
-        boolean isValid(int dy, int dx) {
-            return Math.abs(dy) <= radius && Math.abs(dx) <= radius;
-        }
-
-    }
-
 }
 
 class ShootEnemyBaseInstinct extends Instinct {
@@ -513,6 +544,59 @@ class DefendFriendlyInstinct extends Instinct {
         double[] scores = new double[moves.size()];
 
         return scores;
+    }
+
+}
+
+class LocationRatings<T> {
+
+    private T scores[][];
+    int radius;
+    Location center;
+
+    public LocationRatings(int radius, Location center, T defaultValue) {
+        scores = (T[][]) new Object[radius * 2 + 1][radius * 2 + 1];
+        for (int i = 0; i < scores.length; i++) {
+            for (int j = 0; j < scores[0].length; j++) {
+                scores[i][j] = defaultValue;
+            }
+        }
+        this.radius = radius;
+        this.center = center;
+    }
+
+    void setScore(T value, Location location) {
+        setScore(value, location.getRow(), location.getCol());
+    }
+
+    void setScore(T value, int row, int col) {
+        int dy = row - center.getRow();
+        int dx = col - center.getCol();
+        int r = radius + dy;
+        int c = radius + dx;
+        scores[r][c] = value;
+    }
+
+    T getScore(Location location) {
+        return getScore(location.getRow(), location.getCol());
+    }
+
+    T getScore(int row, int col) {
+        int dy = row - center.getRow();
+        int dx = col - center.getCol();
+        int r = radius + dy;
+        int c = radius + dx;
+        return scores[r][c];
+    }
+
+    boolean isValid(Location location) {
+        return isValid(location.getRow(), location.getCol());
+    }
+
+    boolean isValid(int row, int col) {
+        int dy = row - center.getRow();
+        int dx = col - center.getCol();
+        return Math.abs(dy) <= radius && Math.abs(dx) <= radius;
     }
 
 }
@@ -1023,14 +1107,17 @@ class _Shot extends _Directional {
      * beyond a location
      *
      * @param l
-     * @return Returns the number of turns. Returns -1 if it will never reach.
+     * @return Returns the number of turns. Returns Integer.MAX_VALUE if it will
+     * never reach.
      */
     int turnsToReach(Location l) {
+        if (location.equals(l)) {
+            return 0;
+        }
         if (!facingLocation(l)) {
             return Integer.MAX_VALUE;
         }
         int distance = location.distanceTo(l);
-        distance -= 2;
         if (firstMove) {
             distance++;
         }
