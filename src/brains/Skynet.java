@@ -22,11 +22,11 @@ public class Skynet implements Brain {
     private Behavior behavior;
 
     public Skynet() {
-        this(1);
+        this(2);
     }
 
     public Skynet(int difficulty) {
-        behavior = new Behavior(new SurvivalInstinct(12));
+        behavior = new Behavior(new SurvivalInstinct(2));
 
         if (difficulty > 1) {
             behavior.addInstinct(new ShootEnemyBaseInstinct(1));
@@ -192,9 +192,9 @@ class SurvivalInstinct extends Instinct {
         Location currLocation = state.location();
 
         int scanRadius = 7;
-        LocationRatings<Integer> shotRatings = new LocationRatings(scanRadius, currLocation, -1);
+        LocationRatings<Integer> shotRatings = new LocationRatings(scanRadius, currLocation, 10);
         setShotScores(shotRatings, scanRadius, state);
-        LocationRatings<Integer> playerRatings = new LocationRatings(scanRadius - 2, currLocation, -1);
+        LocationRatings<Integer> playerRatings = new LocationRatings(scanRadius - 2, currLocation, 5);
         setPlayerScores(playerRatings, scanRadius - 2, state);
         LocationRatings<Boolean> immovableRatings = new LocationRatings(scanRadius - 4, currLocation, false);
         setImmovableScores(immovableRatings, scanRadius - 4, state);
@@ -242,7 +242,7 @@ class SurvivalInstinct extends Instinct {
                     //don't move there if it's an unsafe move
                     int shotRating = shotRatings.getScore(dst);
                     if (shotRating >= 0 && shotRating <= 1) {
-                        moveScores[moveInd] -= 20;
+                        moveScores[moveInd] -= 100;
                         break;
                     }
 
@@ -351,7 +351,7 @@ class ShootEnemyBaseInstinct extends Instinct {
                         if (currLocation.canFace(enemyBaseLocation)) {
                             Direction directionToEnemyBase = currLocation.generalDirectionTo(enemyBaseLocation);
                             if (move.getDirection() == directionToEnemyBase) {
-                                scores[moveInd] += 5;
+                                scores[moveInd] += 25;
                             }
                         }
                     }
@@ -359,7 +359,7 @@ class ShootEnemyBaseInstinct extends Instinct {
                 case SHOOT:
                     if (currLocation.distanceTo(enemyBaseLocation) <= 3) {
                         if (state.facing(enemyBaseLocation)) {
-                            scores[moveInd] += 5;
+                            scores[moveInd] += 40;
                         }
                     }
                     break;
@@ -684,8 +684,10 @@ class GameState {
     boolean canShoot() {
         Location offset = direction().directionOffset();
         Location shootLocation = location().plus(offset);
-        if (isValid(shootLocation)) {
-            if (occupants[shootLocation.getRow()][shootLocation.getCol()] == null) {
+        int row = shootLocation.getRow();
+        int col = shootLocation.getCol();
+        if (isValid(row, col)) {
+            if (occupants[row][col] == null || occupants[row][col] instanceof _Base) {
                 return turnsUntilShoot() == 0;
             }
         }
