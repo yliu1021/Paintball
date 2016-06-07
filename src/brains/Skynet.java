@@ -56,7 +56,7 @@ public class Skynet implements Brain {
 
     @Override
     public Color getColor() {
-        return new Color(170, 255, 0);
+        return new Color(255, 255, 0);
     }
 
     private int numTurns = 0;
@@ -138,22 +138,26 @@ final class Behavior {
         double[] moveScores = new double[moves.size()];
 
         for (Instinct instinct : instincts) {
+            System.out.println(instinct);
             double[] scores = instinct.rateMoves(moves, state);
-            for (int j = 0; j < scores.length; j++) {
-                moveScores[j] += scores[j] * instinct.getWeight();
+            for (int i = 0; i < scores.length; i++) {
+                moveScores[i] += scores[i] * instinct.getWeight();
+                System.out.println(moves.get(i) + "\tscore: " + scores[i] * instinct.getWeight());
             }
         }
 
         int ind = 0;
         double maxScore = moveScores[0];
 
+        System.out.println("FINAL");
         for (int i = 0; i < moveScores.length; i++) {
+            System.out.println(moves.get(i) + "\tscore: " + moveScores[i]);
             if (moveScores[i] >= maxScore) {
                 maxScore = moveScores[i];
                 ind = i;
             }
         }
-
+        System.out.println();
         return moves.get(ind);
     }
 
@@ -238,6 +242,8 @@ class SurvivalInstinct extends Instinct {
 //                            
 //                        }
 //                    }
+                case SHOOT:
+                case TURN:
                 case PASS:
                 case MOVE:
                     Location dst = move.locationAfterMove(currLocation, state);
@@ -250,12 +256,20 @@ class SurvivalInstinct extends Instinct {
                     }
 
                     if (shotRating >= 2 && shotRating <= 3) {
-                        moveScores[moveInd] -= 10;
+                        moveScores[moveInd] -= 30;
                         break;
                     }
 
                     int score = shotRatings.getScore(dst);
                     moveScores[moveInd] += score;
+
+                    int playerRating = playerRatings.getScore(dst);
+                    System.out.println("player rating: " + playerRating);
+                    if (playerRating > 1 && playerRating <= 3) {
+                        System.out.println("found closeby player facing player");
+                        moveScores[moveInd] -= 50;
+                    }
+
                     break;
             }
         }
@@ -292,11 +306,7 @@ class SurvivalInstinct extends Instinct {
                     continue;
                 }
                 int distance = playerLocation.distanceTo(currLocation);
-                if (distance <= 4) {
-                    locationRatings.setScore((distance + 1) / 2, playerLocation);
-                } else {
-                    locationRatings.setScore(distance, playerLocation);
-                }
+                locationRatings.setScore(distance, playerLocation);
             }
         }
     }
@@ -354,7 +364,7 @@ class ShootEnemyBaseInstinct extends Instinct {
                         if (currLocation.canFace(enemyBaseLocation)) {
                             Direction directionToEnemyBase = currLocation.generalDirectionTo(enemyBaseLocation);
                             if (move.getDirection() == directionToEnemyBase) {
-                                scores[moveInd] += 25;
+                                scores[moveInd] += 20;
                             }
                         }
                     }
