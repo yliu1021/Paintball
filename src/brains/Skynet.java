@@ -19,6 +19,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public class Skynet implements Brain {
 
+    static boolean DEBUG = true;
+
     private Behavior behavior;
 
     public Skynet() {
@@ -54,16 +56,18 @@ public class Skynet implements Brain {
 
     @Override
     public Color getColor() {
-        return Color.MAGENTA;
+        return new Color(170, 255, 0);
     }
 
     private int numTurns = 0;
 
     @Override
     public Action getMove(Player p, Board b) {
-        numTurns++;
-        if (numTurns % 100 == 0) {
-            System.out.println((double) p.getDeaths() / (double) numTurns);
+        if (DEBUG) {
+            numTurns++;
+            if (numTurns % 100 == 0) {
+                System.out.println((double) p.getDeaths() / (double) numTurns);
+            }
         }
         GameState state = new GameState(p, b);
 
@@ -186,7 +190,6 @@ class SurvivalInstinct extends Instinct {
      */
     @Override
     double[] rateMoves(List<Move> moves, GameState state) {
-//        System.out.println("NEW RATING:");
         double[] moveScores = new double[moves.size()];
 
         Location currLocation = state.location();
@@ -196,10 +199,10 @@ class SurvivalInstinct extends Instinct {
         setShotScores(shotRatings, scanRadius, state);
         LocationRatings<Integer> playerRatings = new LocationRatings(scanRadius - 2, currLocation, 5);
         setPlayerScores(playerRatings, scanRadius - 2, state);
-        LocationRatings<Boolean> immovableRatings = new LocationRatings(scanRadius - 4, currLocation, false);
-        setImmovableScores(immovableRatings, scanRadius - 4, state);
-        
-        //Locations that won't get killed the next turn
+//        LocationRatings<Boolean> immovableRatings = new LocationRatings(scanRadius - 4, currLocation, false);
+//        setImmovableScores(immovableRatings, scanRadius - 4, state);
+
+        //Locations that won't get shot at the next turn
         ArrayList<Location> safeLocations = new ArrayList(8);
 
         //Setup possible moves
@@ -219,7 +222,7 @@ class SurvivalInstinct extends Instinct {
                 safeLocations.remove(i);
             }
         }
-        
+
         for (int moveInd = 0; moveInd < moveScores.length; moveInd++) {
             Move move = moves.get(moveInd);
             switch (move.getMoveType()) {

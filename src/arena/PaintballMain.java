@@ -43,10 +43,16 @@ public class PaintballMain extends javax.swing.JFrame {
     private void reset() {
         //fill team rosters
         team = new Player[3][];
-        team[1] = new Player[20];
+        System.out.println("Creating teams");
+        team[1] = new Player[40];
         team[2] = new Player[1];
         for (int i = 0; i < team[1].length; i++) {
-            team[1][i] = new Player(1, new Sprinkler());
+            if (i % 10 == 0) {
+                team[1][i] = new Player(1, new Sprinkler());
+            }
+            else {
+                team[1][i] = new Player(1, new Sprinkler());
+            }
         }
         for (int i = 0; i < team[2].length; i++) {
             team[2][i] = new Player(2, new Skynet());
@@ -74,6 +80,7 @@ public class PaintballMain extends javax.swing.JFrame {
 //        team[1][10] = new Player(1, new sharpshooter());
 //        team[2][10] = new Player(2, new updownshooter()); 
         //create game board
+        System.out.println("Done creating teams");
         board = new Board(33, 50);
         fieldPanel.setMyBoard(board);
 
@@ -82,11 +89,13 @@ public class PaintballMain extends javax.swing.JFrame {
 
         
         //place bases
+        System.out.println("Placing bases");
         Base blackBase = new Base(1);
         blackBase.addSelfToBoard(board, 16, 0);
         Base redBase = new Base(2);
         redBase.addSelfToBoard(board, 16, 49);
-        
+        System.out.println("Placed bases");
+        System.out.println("Filling blockers");
         //place blocks
         new Blocker().addSelfToBoard(board, 12, 0);
         new Blocker().addSelfToBoard(board, 20, 0);
@@ -99,7 +108,7 @@ public class PaintballMain extends javax.swing.JFrame {
         new Blocker().addSelfToBoard(board, 12, 45);
         new Blocker().addSelfToBoard(board, 20, 45);
         final int NUM_BLOCKS_PER_SIDE = 50;
-        for (int i = 0; i < NUM_BLOCKS_PER_SIDE; ) {
+        for (int i = 0; i < NUM_BLOCKS_PER_SIDE; i++) {
             int row = randGen.nextInt(33);
             int col = randGen.nextInt(25);
             if (board.isEmpty(row, col) &&
@@ -109,14 +118,16 @@ public class PaintballMain extends javax.swing.JFrame {
                 i++;
             }
         }
-        
+        System.out.println("Filled blockers");
         //put players on board
+        System.out.println("Spawning players");
         for (int t = 1; t <= 2; t++) {
             for (int p = 0; p < team[t].length; p++) {
+                System.out.println("Team: " + t + " player: " + p);
                 team[t][p].respawn(board);
             }
         }
-        
+        System.out.println("Spawned all players");
         repaint();
         
         //reset turn counter
