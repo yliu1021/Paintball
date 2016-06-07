@@ -264,7 +264,7 @@ class SurvivalInstinct extends Instinct {
                     moveScores[moveInd] += score;
 
                     int playerRating = playerRatings.getScore(dst);
-                    System.out.println("player rating: " + playerRating);
+                    System.out.println(moves.get(moveInd) + "player rating: " + playerRating);
                     if (playerRating > 1 && playerRating <= 3) {
                         System.out.println("found closeby player facing player");
                         moveScores[moveInd] -= 50;
@@ -305,7 +305,8 @@ class SurvivalInstinct extends Instinct {
                 if (!locationRatings.isValid(playerLocation)) {
                     continue;
                 }
-                int distance = playerLocation.distanceTo(currLocation);
+//                int distance = playerLocation.distanceTo(currLocation);
+                int distance = player.location.distanceTo(playerLocation);
                 locationRatings.setScore(distance, playerLocation);
             }
         }
@@ -352,8 +353,16 @@ class ShootEnemyBaseInstinct extends Instinct {
                         if (!currLocation.canFace(enemyBaseLocation) && dstLocation.canFace(enemyBaseLocation)) {
                             scores[moveInd] += 5;
                         }
-                    } else if (dstLocation.distanceTo(enemyBaseLocation) < currLocation.distanceTo(enemyBaseLocation)) {
-                        scores[moveInd] += 5;
+                    } else {
+                        int newDist = dstLocation.distanceTo(enemyBaseLocation);
+                        int oldDist = currLocation.distanceTo(enemyBaseLocation);
+                        if (newDist < oldDist) {
+                            scores[moveInd] += 5;
+                        } else if (newDist == oldDist) {
+                            scores[moveInd] += 1;
+                        } else {
+                            scores[moveInd] -= 1;
+                        }
                     }
                     break;
                 case TURN:
