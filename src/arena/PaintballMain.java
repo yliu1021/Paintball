@@ -44,7 +44,7 @@ public class PaintballMain extends javax.swing.JFrame {
         //fill team rosters
         team = new Player[3][];
         System.out.println("Creating teams");
-        team[1] = new Player[20];
+        team[1] = new Player[40];
         team[2] = new Player[1];
         for (int i = 0; i < team[1].length; i++) {
             if (i % 10 == 0) {
