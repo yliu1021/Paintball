@@ -56,7 +56,7 @@ public class Skynet implements Brain {
 
     @Override
     public Color getColor() {
-        return new Color(255, 255, 0);
+        return new Color(255, 255, 255);
     }
 
     private int numTurns = 0;
@@ -279,6 +279,27 @@ class SurvivalInstinct extends Instinct {
 //                        }
 //                    }
                 case SHOOT:
+                    Direction facingDirection = state.direction();
+                    List<_Occupant> targets = state.getOccupantsInDirection(facingDirection);
+                    if (targets.isEmpty()) {
+                        break;
+                    }
+                    _Occupant o = targets.get(0);
+                    if (o instanceof _Shot) {
+                        _Shot s = (_Shot) o;
+                        if (s.turnsToReach(currLocation) == 1) {
+                            boolean trapped = true;
+                            for (Direction d : Direction.values()) {
+                                Location neighboringSpace = d.directionOffset().plus(currLocation);
+                                if (shotRatings.getScore(neighboringSpace) >= 2) {
+                                    trapped = false;
+                                }
+                            }
+                            if (trapped) {
+                                moveScores[moveInd] += 40;
+                            }
+                        }
+                    }
                 case TURN:
                 case PASS:
                 case MOVE:
@@ -378,7 +399,7 @@ class ShootEnemyBaseInstinct extends Instinct {
 
         Location currLocation = state.location();
         Location enemyBaseLocation = state.getEnemyBase().location;
-        
+
         boolean insideBase = currLocation.distanceTo(enemyBaseLocation) <= 3;
         List<_Occupant> targets = state.getOccupantsInLOS();
         if (insideBase && !targets.isEmpty() && targets.get(0) instanceof _Base) {
@@ -386,9 +407,21 @@ class ShootEnemyBaseInstinct extends Instinct {
                 if (moves.get(i).getMoveType() == Move.MoveType.SHOOT) {
                     scores[i] += 40;
                 }
+                if (moves.get(i).getMoveType() == Move.MoveType.MOVE) {
+                    Location dstLocation = moves.get(i).locationAfterMove(currLocation, state);
+                    int newDist = dstLocation.distanceTo(enemyBaseLocation);
+                    int oldDist = currLocation.distanceTo(enemyBaseLocation);
+                    if (newDist < oldDist) {
+                        scores[i] += 4;
+                    } else if (newDist == oldDist) {
+                        scores[i] += 1;
+                    } else {
+                        scores[i] -= 1;
+                    }
+                }
             }
         }
-        
+
         List<_Player> enemyPlayers = state.getOccupantsInArea(enemyBaseLocation, 3, _Player.class);
         for (int i = enemyPlayers.size() - 1; i >= 0; i--) {
             if (enemyPlayers.get(i).team == state.team()) {
@@ -440,7 +473,7 @@ class ShootEnemyBaseInstinct extends Instinct {
                                     scores[moveInd] += 4;
                                 }
                             } else {
-                                scores[moveInd] += 1;
+                                scores[moveInd] -= 1;
                             }
                         }
                     } else {
@@ -569,7 +602,9 @@ class ShootEnemyInstinct extends Instinct {
                 break;
                 case TURN: {
                     Direction turnDirection = move.getDirection();
-                    
+                    if (turnDirection.equals(state.direction())) {
+                        break;
+                    }
                     List<_Occupant> targets = state.getOccupantsInDirection(turnDirection);
                     if (targets.isEmpty()) {
                         break;
@@ -596,10 +631,10 @@ class ShootEnemyInstinct extends Instinct {
                 case MOVE: {
                     Location dstLocation = move.locationAfterMove(currLocation, state);
                     Direction facingDirection = state.direction();
-                    
+
                     List<_Player> validTargets = getPossibleTargets(dstLocation, state);
-                    scores[moveInd] += validTargets.size();
-                    
+                    scores[moveInd] += validTargets.size() / 2.0;
+
                     List<_Occupant> newLOSTargets = state.getOccupantsInDirection(dstLocation, facingDirection);
                     if (!newLOSTargets.isEmpty()) {
                         _Occupant o = newLOSTargets.get(0);
@@ -611,11 +646,11 @@ class ShootEnemyInstinct extends Instinct {
                             if (p.team != state.team()) {
                                 int distance = p.location.distanceTo(dstLocation);
                                 if (distance == 2) {
-                                    scores[moveInd] += 6;
+                                    scores[moveInd] += 10;
                                 } else if (distance == 1) {
-                                    scores[moveInd] += 2;
+                                    scores[moveInd] -= 4;
                                 } else {
-                                    scores[moveInd] += Math.max(0, 5 - distance);
+                                    scores[moveInd] += Math.max(0, 6 - distance);
                                 }
                             }
                         }
@@ -627,7 +662,7 @@ class ShootEnemyInstinct extends Instinct {
 
         return scores;
     }
-    
+
     List<_Player> getPossibleTargets(Location location, GameState state) {
         List<_Player> targets = new ArrayList<>();
         for (Direction d : Direction.values()) {
@@ -646,7 +681,7 @@ class ShootEnemyInstinct extends Instinct {
         }
         return targets;
     }
-    
+
 }
 
 class DefendBaseInstinct extends Instinct {
