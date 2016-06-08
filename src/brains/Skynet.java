@@ -515,7 +515,7 @@ class ShootEnemyInstinct extends Instinct {
 
         Location currLocation = state.location();
         Location enemyBaseLocation = state.getEnemyBase().location;
-        if (currLocation.distanceTo(enemyBaseLocation) > 3) {
+        if (currLocation.distanceTo(enemyBaseLocation) > 6) {
             return scores;
         }
 
@@ -555,6 +555,8 @@ class ShootEnemyInstinct extends Instinct {
                                 scores[moveInd] += 20;
                             } else if (distance == 3) {
                                 scores[moveInd] += 17;
+                            } else {
+                                scores[moveInd] += Math.max(4, 10 - distance);
                             }
                         }
                     } else if (firstTarget instanceof _Base) {
@@ -584,7 +586,7 @@ class ShootEnemyInstinct extends Instinct {
                             if (distance > 1) {
                                 scores[moveInd] += Math.max(3, 12 - distance);
                             } else {
-                                scores[moveInd] += 8;
+                                scores[moveInd] += 5;
                             }
                         }
                     }
@@ -609,7 +611,7 @@ class ShootEnemyInstinct extends Instinct {
                             if (p.team != state.team()) {
                                 int distance = p.location.distanceTo(dstLocation);
                                 if (distance == 2) {
-                                    scores[moveInd] += 10;
+                                    scores[moveInd] += 6;
                                 } else if (distance == 1) {
                                     scores[moveInd] += 2;
                                 } else {
