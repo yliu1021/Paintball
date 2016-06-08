@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public class Skynet implements Brain {
 
-    static boolean DEBUG = true;
+    static boolean DEBUG = false;
 
     private Behavior behavior;
 
@@ -66,7 +66,7 @@ public class Skynet implements Brain {
         if (DEBUG) {
             numTurns++;
             if (numTurns % 100 == 0) {
-                System.out.println((double) p.getDeaths() / (double) numTurns);
+                Skynet.debugPrint((double) p.getDeaths() / (double) numTurns);
             }
         }
         GameState state = new GameState(p, b);
@@ -92,6 +92,42 @@ public class Skynet implements Brain {
         }
         scores[p.getTeam()] = 1000000;
         scores[3 - p.getTeam()] = -1000000;
+    }
+
+    static void debugPrint(Object o) {
+        if (DEBUG) {
+            System.out.println(o);
+        }
+    }
+
+    static void debugPrint(float f) {
+        if (DEBUG) {
+            System.out.println(f);
+        }
+    }
+
+    static void debugPrint(double d) {
+        if (DEBUG) {
+            System.out.println(d);
+        }
+    }
+
+    static void debugPrint(int i) {
+        if (DEBUG) {
+            System.out.println(i);
+        }
+    }
+
+    static void debugPrint(long l) {
+        if (DEBUG) {
+            System.out.println(l);
+        }
+    }
+
+    static void debugPrint() {
+        if (DEBUG) {
+            System.out.println();
+        }
     }
 
 }
@@ -138,26 +174,26 @@ final class Behavior {
         double[] moveScores = new double[moves.size()];
 
         for (Instinct instinct : instincts) {
-            System.out.println(instinct);
+            Skynet.debugPrint(instinct);
             double[] scores = instinct.rateMoves(moves, state);
             for (int i = 0; i < scores.length; i++) {
                 moveScores[i] += scores[i] * instinct.getWeight();
-                System.out.println(moves.get(i) + "\tscore: " + scores[i] * instinct.getWeight());
+                Skynet.debugPrint(moves.get(i) + "\tscore: " + scores[i] * instinct.getWeight());
             }
         }
 
         int ind = 0;
         double maxScore = moveScores[0];
 
-        System.out.println("FINAL");
+        Skynet.debugPrint("FINAL");
         for (int i = 0; i < moveScores.length; i++) {
-            System.out.println(moves.get(i) + "\tscore: " + moveScores[i]);
+            Skynet.debugPrint(moves.get(i) + "\tscore: " + moveScores[i]);
             if (moveScores[i] >= maxScore) {
                 maxScore = moveScores[i];
                 ind = i;
             }
         }
-        System.out.println();
+        Skynet.debugPrint();
         return moves.get(ind);
     }
 
@@ -264,9 +300,9 @@ class SurvivalInstinct extends Instinct {
                     moveScores[moveInd] += score;
 
                     int playerRating = playerRatings.getScore(dst);
-                    System.out.println(moves.get(moveInd) + "player rating: " + playerRating);
+                    Skynet.debugPrint(moves.get(moveInd) + "player rating: " + playerRating);
                     if (playerRating > 1 && playerRating <= 3) {
-                        System.out.println("found closeby player facing player");
+                        Skynet.debugPrint("found closeby player facing player");
                         moveScores[moveInd] -= 50;
                     }
 
@@ -343,15 +379,61 @@ class ShootEnemyBaseInstinct extends Instinct {
         Location currLocation = state.location();
         Location enemyBaseLocation = state.getEnemyBase().location;
 
+        List<_Player> enemyPlayers = state.getOccupantsInArea(enemyBaseLocation, 3, _Player.class);
+        for (int i = enemyPlayers.size() - 1; i >= 0; i--) {
+            if (enemyPlayers.get(i).team == state.team()) {
+                enemyPlayers.remove(i);
+            }
+        }
+        List<_Player> teammatesAroundBase = state.getOccupantsInArea(enemyBaseLocation, 1, _Player.class);
+        for (int i = teammatesAroundBase.size() - 1; i >= 0; i--) {
+            if (teammatesAroundBase.get(i).team == state.team()) {
+                teammatesAroundBase.remove(i);
+            }
+        }
+
+        boolean insideBase = currLocation.distanceTo(enemyBaseLocation) <= 3;
+
+        if (insideBase) {
+            if (teammatesAroundBase.size() >= 5) { //base is blocked by teammates
+                return scores;
+            }
+
+            if (enemyPlayers.size() > 1) { //more than 1 enemy in enemy base
+                return scores;
+            }
+        }
+
         for (int moveInd = 0; moveInd < scores.length; moveInd++) {
             Move move = moves.get(moveInd);
 
             switch (move.getMoveType()) {
+                case PASS:
                 case MOVE:
                     Location dstLocation = move.locationAfterMove(currLocation, state);
-                    if (currLocation.distanceTo(enemyBaseLocation) <= 3) {
-                        if (!currLocation.canFace(enemyBaseLocation) && dstLocation.canFace(enemyBaseLocation)) {
-                            scores[moveInd] += 5;
+                    if (insideBase) { //inside enemy base
+                        if (dstLocation.canFace(enemyBaseLocation)) {
+                            List<_Occupant> occupantsToBase = state.getOccupantsInDirection(dstLocation, dstLocation.generalDirectionTo(enemyBaseLocation));
+                            boolean facesFriendly = false;
+                            for (_Occupant o : occupantsToBase) {
+                                if (o instanceof _Player && ((_Player) o).team == state.team()) {
+                                    facesFriendly = true;
+                                } else if (o instanceof _Blocker || (o instanceof _Base && ((_Base) o).team != state.team())) {
+                                    break;
+                                }
+                            }
+                            if (!facesFriendly) {
+                                _Occupant o = occupantsToBase.get(0);
+                                if (o instanceof _Base) {
+                                    scores[moveInd] += 6;
+                                } else if (o.location.distanceTo(dstLocation) > 1) {
+                                    scores[moveInd] += 5;
+                                } else {
+                                    scores[moveInd] += 4;
+                                }
+                            } else {
+                                scores[moveInd] += 1;
+                            }
                         }
                     } else {
                         int newDist = dstLocation.distanceTo(enemyBaseLocation);
@@ -369,7 +451,7 @@ class ShootEnemyBaseInstinct extends Instinct {
                     if (state.facing(enemyBaseLocation)) {
                         break;
                     }
-                    if (currLocation.distanceTo(enemyBaseLocation) <= 3) {
+                    if (insideBase) {
                         if (currLocation.canFace(enemyBaseLocation)) {
                             Direction directionToEnemyBase = currLocation.generalDirectionTo(enemyBaseLocation);
                             if (move.getDirection() == directionToEnemyBase) {
@@ -379,9 +461,22 @@ class ShootEnemyBaseInstinct extends Instinct {
                     }
                     break;
                 case SHOOT:
-                    if (currLocation.distanceTo(enemyBaseLocation) <= 3) {
+                    if (insideBase) {
                         if (state.facing(enemyBaseLocation)) {
-                            scores[moveInd] += 40;
+                            List<_Occupant> occupantsInLOS = state.getOccupantsInLOS(_Occupant.class);
+                            if (occupantsInLOS.isEmpty()) {
+                                Skynet.debugPrint("Empty shot location");
+                            } else {
+                                _Occupant first = occupantsInLOS.get(0);
+                                if (first instanceof _Base) {
+                                    scores[moveInd] += 40;
+                                } else if (first instanceof _Player) {
+                                    _Player firstPlayer = (_Player) first;
+                                    if (firstPlayer.team != state.team()) {
+                                        scores[moveInd] += 20;
+                                    }
+                                }
+                            }
                         }
                     }
                     break;
@@ -410,114 +505,79 @@ class ShootEnemyInstinct extends Instinct {
     double[] rateMoves(List<Move> moves, GameState state) {
         double[] scores = new double[moves.size()];
 
-        List<_Occupant> occupantsInLOS = state.getOccupantsInLOS(_Occupant.class);
         Location currLocation = state.location();
+        Location enemyBaseLocation = state.getEnemyBase().location;
+        if (currLocation.distanceTo(enemyBaseLocation) > 3) {
+            return scores;
+        }
 
-        int friendlyDistance = Integer.MAX_VALUE;
-        boolean facingOwnBase = false;
-        for (_Occupant o : occupantsInLOS) {
-            if (o instanceof _Player) {
-                _Player p = (_Player) o;
-                if (p.team == state.team()) {
-                    int d = p.location.distanceTo(currLocation);
-                    if (d < friendlyDistance) {
-                        friendlyDistance = d;
-                    }
-                }
-            } else if (o instanceof _Base) {
-                _Base b = (_Base) o;
-                if (b.team == state.team()) {
-                    facingOwnBase = true;
-                }
-            } else if (o instanceof _Blocker) {
-                break;
+        List<_Player> enemyPlayers = state.getOccupantsInArea(enemyBaseLocation, 3, _Player.class);
+        for (int i = enemyPlayers.size() - 1; i >= 0; i--) {
+            if (enemyPlayers.get(i).team == state.team()) {
+                enemyPlayers.remove(i);
+            }
+        }
+        List<_Player> teammatesSurroundingBase = state.getOccupantsInArea(enemyBaseLocation, 1, _Player.class);
+        for (int i = teammatesSurroundingBase.size() - 1; i >= 0; i--) {
+            if (teammatesSurroundingBase.get(i).team == state.team()) {
+                teammatesSurroundingBase.remove(i);
+            }
+        }
+
+        if (teammatesSurroundingBase.size() < 5) {
+            if (enemyPlayers.size() <= 1) { //less than 1 enemy in enemy base
+                return scores;
             }
         }
 
         for (int moveInd = 0; moveInd < scores.length; moveInd++) {
             Move move = moves.get(moveInd);
-
-            if (null != move.getMoveType()) {
-                switch (move.getMoveType()) {
-                    case SHOOT: {
-                        if (occupantsInLOS.isEmpty()) {
-                            break;
-                        }
-                        if (facingOwnBase) {
-                            break;
-                        }
-                        if (friendlyDistance <= 6) {
-                            break;
-                        }
-                        _Occupant o = occupantsInLOS.get(0);
-                        if (o.location.distanceTo(currLocation) <= 3) {
-                            if (o instanceof _Player) {
-                                _Player p = (_Player) o;
-                                if (p.team != state.team()) {
-                                    System.out.println("shoot");
-                                    scores[moveInd] += 7;
-                                }
-                            }
-                        }
+            switch (move.getMoveType()) {
+                case SHOOT: {
+                    List<_Occupant> targets = state.getOccupantsInLOS();
+                    if (targets.isEmpty()) {
                         break;
                     }
-                    case TURN: {
-                        List<_Occupant> occupants = state.getOccupantsInDirection(move.getDirection(), _Occupant.class);
-                        friendlyDistance = Integer.MAX_VALUE;
-                        facingOwnBase = false;
-                        for (_Occupant o : occupants) {
-                            if (o instanceof _Player) {
-                                _Player p = (_Player) o;
-                                if (p.team == state.team()) {
-                                    int d = p.location.distanceTo(currLocation);
-                                    if (d < friendlyDistance) {
-                                        friendlyDistance = d;
-                                    }
-                                }
-                            } else if (o instanceof _Base) {
-                                _Base b = (_Base) o;
-                                if (b.team == state.team()) {
-                                    facingOwnBase = true;
-                                }
-                            } else if (o instanceof _Blocker) {
-                                break;
+                    _Occupant firstTarget = targets.get(0);
+                    if (firstTarget instanceof _Player) {
+                        _Player p = (_Player) firstTarget;
+                        if (p.team != state.team()) {
+                            int distance = p.location.distanceTo(currLocation);
+                            if (distance <= 2) {
+                                scores[moveInd] += 10;
+                            } else if (distance == 3) {
+                                scores[moveInd] += 6;
                             }
                         }
-                        if (occupantsInLOS.isEmpty()) {
-                            continue;
+                    } else if (firstTarget instanceof _Base) {
+                        _Base b = (_Base) firstTarget;
+                        if (b.team != state.team()) {
+                            scores[moveInd] += 10;
                         }
-                        if (facingOwnBase) {
-                            continue;
-                        }
-                        if (friendlyDistance <= 6) {
-                            continue;
-                        }
-                        _Occupant o = occupants.get(0);
-                        if (o.location.distanceTo(currLocation) <= 2) {
-                            if (o instanceof _Player) {
-                                _Player p = (_Player) o;
-                                if (p.team != state.team()) {
-                                    System.out.println("turn");
-                                    scores[moveInd] += 2;
-                                }
-                            }
-                        }
-                        break;
                     }
-                    case MOVE: {
-                        List<_Player> occupants = state.getOccupantsInArea(currLocation, 1, _Player.class);
-                        Location dst = move.locationAfterMove(currLocation, state);
-                        for (_Player player : occupants) {
-                            if (player.location.distanceTo(dst) > player.location.distanceTo(currLocation)) {
-                                scores[moveInd] += 2;
-                                break;
-                            }
-                        }
-                        break;
-                    }
-                    default:
-                        break;
                 }
+                break;
+                case TURN: {
+                    Direction shootDirection = move.getDirection();
+                    List<_Occupant> targets = state.getOccupantsInDirection(shootDirection);
+                    if (targets.isEmpty()) {
+                        break;
+                    }
+
+                    _Occupant firstTarget = targets.get(0);
+                    if (firstTarget instanceof _Player) {
+                        _Player p = (_Player) firstTarget;
+                        if (p.team != state.team()) {
+                            int distance = p.location.distanceTo(currLocation);
+                            if (distance > 1) {
+                                scores[moveInd] += Math.max(1, 4 - distance);
+                            } else {
+                                scores[moveInd] += 1;
+                            }
+                        }
+                    }
+                }
+                break;
             }
         }
 
@@ -1283,6 +1343,14 @@ class Move {
         return false;
     }
 
+    @Override
+    public int hashCode() {
+        int hash = 3;
+        hash = 89 * hash + Objects.hashCode(this.moveType);
+        hash = 89 * hash + Objects.hashCode(this.direction);
+        return hash;
+    }
+
 }
 
 enum Direction {
@@ -1704,7 +1772,7 @@ class StateProcessor extends Thread {
     public void run() {
         GameState previousState = null;
         while (processing) {
-            System.out.println("size" + states.size());
+            Skynet.debugPrint("size" + states.size());
             while (states.isEmpty()) {
                 synchronized (this) {
                     try {
@@ -1734,7 +1802,7 @@ class StateProcessor extends Thread {
                 }
                 previousState = newState;
             } catch (NoSuchElementException e) {
-                System.out.println("Tried to remove element from empty queue\nError in concurrency code");
+                Skynet.debugPrint("Tried to remove element from empty queue\nError in concurrency code");
             }
         }
     }
