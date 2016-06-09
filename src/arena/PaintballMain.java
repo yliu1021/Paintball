@@ -44,18 +44,22 @@ public class PaintballMain extends javax.swing.JFrame {
         //fill team rosters
         team = new Player[3][];
         System.out.println("Creating teams");
-        team[1] = new Player[4];
-        team[2] = new Player[40];
+        team[1] = new Player[3];
+        team[2] = new Player[3];
+//        for (int i = 0; i < team[2].length; i++) {
+//            if (i % 10 == 0) {
+//                team[2][i] = new Player(2, new Sprinkler());
+//            }
+//            else {
+//                team[2][i] = new Player(2, new RandoBot());
+//            }
+//        }
+        team[1][0] = new Player(1, new ExodiaBotL());
+        team[1][1] = new Player(1, new ExodiaBotR());
+        team[1][2] = new Player(1, new ExodiaBotM());
+        
         for (int i = 0; i < team[2].length; i++) {
-            if (i % 10 == 0) {
-                team[2][i] = new Player(2, new Sprinkler());
-            }
-            else {
-                team[2][i] = new Player(2, new RandoBot());
-            }
-        }
-        for (int i = 0; i < team[1].length; i++) {
-            team[1][i] = new Player(1, new Skynet());
+            team[2][i] = new Player(2, new Skynet());
         }
 //        team[1][0] = new Player(1, new BangBang300());
 //        team[2][0] = new Player(2, new BillyTester());
